@@ -1,4 +1,4 @@
-// Shared privacy policy for the HTTP backend and browser demo.
+// Astrobio HTTP backend privacy policy.
 import { canSee, type User } from './data/users.ts'
 
 export const MESSAGE_MAX_CHARS = 4000

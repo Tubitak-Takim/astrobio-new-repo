@@ -1,42 +1,47 @@
-# Backend'i yeniden kullanma
+# Astrobio backend
 
-Sorumlu: **Muhammet Kerim Şahin**. Bu katman Node 24+ HTTP sunucusu ve yerleşik SQLite kullanır; React/Three.js çalışma zamanı bağımlılığı yoktur.
+Sorumlu: **Muhammet Kerim Şahin**. Node 24+ HTTP sunucusu ve yerleşik SQLite kullanılır. Frontend ve üretim çalışma zamanı npm bağımlılığı yoktur.
 
-## Yerel çalıştırma
+## Çalıştırma
 
 ```bash
 npm ci
-cp .env.example .env
-npm run server
+npm run dev
 ```
 
-Varsayılan adres: `http://127.0.0.1:8787`. Sağlık kontrolü: `GET /api/health`. `.env` içindeki `DB_FILE` ile ayrı bir veritabanı seçilebilir; mevcut dosyalar silinmez. `npm run dev` API ve referans frontend'i birlikte çalıştırır.
+`.env.example` ilk kurulum için örnektir; mevcut `.env` dosyasını koruyun. İzlemesiz çalıştırma: `npm start` veya `npm run server`. Varsayılan adres `http://127.0.0.1:8787`; sağlık kontrolü `/api/health`.
 
-## Başka frontend/depo ile kullanım
+| Ayar | Varsayılan / amaç |
+|---|---|
+| `API_PORT` | `8787` |
+| `DB_FILE` | `data/crew-health.sqlite`; eski kayıtlarla uyumluluk için korunur |
+| `GEMINI_API_KEY` | Boşsa bulut yeniden ifade etme kapalı |
+| `GEMINI_MODEL` | İsteğe bağlı model adı |
+| `LOCAL_AI_ENABLED` | `false`; deneysel yerel açıklama için `true` |
+| `LOCAL_AI_URL` | `http://127.0.0.1:11434`; yalnız sayısal loopback |
+| `LOCAL_AI_MODEL` | Boş; kurulu/doğrulanmış yerel Ollama aliası seçilmeli |
+| `LOCAL_AI_TIMEOUT_MS` | `90000`; 1000–120000 aralığı |
 
-Yalnızca `server/index.ts` kopyalamak yeterli değildir. Mevcut göreli import yapısını koruyarak şu dosyaları birlikte taşıyın:
+Yerel AI, `server/localAi.ts` içindeki bağımsız Ollama adaptörüdür; model indirmez veya başlatmaz. `/api/ai/status` ve rol kontrollü `/api/ai/explain` endpointleri eklendi. Araştırma ve kullanıcı tarafından tamamlanacak kurulum adımları: [LOCAL_AI.md](../docs/LOCAL_AI.md). `npm run ai:check` kurulu aliası kontrol eder; kapalı/hazır değilse hata çıkış kodu verir. `.env` içindeki `LOCAL_AI_*` ayarları Ollama daemon'unu değil yalnız Astrobio bağlantısını yapılandırır.
 
-- `server/index.ts`, `server/http.ts`
-- `api/reword.js` (opsiyonel özellik kapalı olsa da sunucu bu modülü import eder)
-- `src/access.ts`, `src/assessment.ts`, `src/validate.ts`, `src/model.ts`, `src/triage.ts`
-- `src/data/simulatedCrew.ts`, `src/data/users.ts`, `src/data/missions.ts`, `src/data/sources.ts`
-- Kaynak ve veri kredileri ile ilgili araştırma belgeleri
+Clone sonrası `npm run setup:local-ai`, onaylı indirme/üretim testi/yerel ayar yazımını tek komutta yapar. Ollama servisinin ve sürücünün önceden kurulmuş olması gerekir; araç eksikleri bildirir, otomatik sistem kurulumu yapmaz. İlk başarılı çalıştırmanın `local-ai/model-lock.json` dosyası ekipçe incelenip Git'e eklenmelidir.
 
-Bu, bugünkü bağımlılık listesidir; yeni importlar eklendiğinde tekrar kontrol edin. `api/reword.d.ts` dosyasını da TypeScript araçları için taşıyabilirsiniz. Sunucu testlerini yeni depoya uyarlayın. `public/anatomy/`, ekranlar ve stiller backend için gerekmez. Veritabanını, oturumları ve `.env` anahtarlarını kopyalamayın.
+## Başka proje ile kullanım
 
-**Lisans notu:** Bu kopyada uygulama kodu için genel bir `LICENSE` dosyası bulunmuyor. Dosyalara erişilebilmesi yeniden dağıtım izni anlamına gelmez. Kaynak sahibinin iznini ve yarışmanın özgünlük/atıf koşullarını kontrol edin. Anatomik modellerin ve NASA verilerinin ayrı kaynak/atıf koşulları vardır; README kredilerini silmeyin.
+Mevcut göreli import yapısını koruyarak `server/` ve `src/` modüllerini, kök yapılandırmayı, lisansı ve veri/kaynak belgelerini birlikte taşıyabilirsiniz. `server/reword.js` opsiyonel özelliğin iç servisidir; Node API bu dosyayı anahtar olmasa da import eder. Testler geliştirme araçları gerektirir; Node API'nin çalışma zamanı yalnız Node yerleşik modüllerine dayanır.
 
-## API sınırı ve dağıtım
+`.env`, oturumlar ve veritabanındaki sağlık kayıtlarını başka depoya kopyalamayın. [LICENSE](../LICENSE) GNU GPL v3 metnini içerir; dağıtımdan önce kod ve veri için geçerli lisans/atıf koşullarını inceleyin. Orijinal araştırma kökenini silmeyin.
 
-- Yeni frontend için [API sözleşmesini](../docs/API.md) kullanın. Sağlık değerlendirmeleri artık sunucudan alınabilir.
-- Geliştirmede frontend sunucusundan `/api` proxy'si kullanın. `API_PROXY_TARGET` başka backend adresine yönlendirebilir.
-- Üretimde statik frontend ile Node API'yi aynı origin arkasında HTTPS reverse proxy üzerinden yayınlayın. Sunucu özellikle loopback üzerinde dinler; doğrudan genel ağa açılmaz. CORS bilerek herkese açılmamıştır.
-- Statik Vercel demo, SQLite backend'in dağıtımı değildir. `api/reword.js` tek başına tam sunucuyu sağlamaz.
-- `npm run build` frontend üretir ve tip kontrolü yapar; backend binary'si üretmez. Backend Node ile `.ts` dosyasından çalışır.
-- Gerçek sunucu kullanan frontend'i `VITE_BACKEND_MODE=server` ile derleyin; böylece bağlantı hatası tarayıcı demo verisine geçişe neden olmaz. Bu bir derleme zamanı ayarıdır; değişiklikten sonra Vite'ı yeniden başlatın/derleyin.
+## Yeni frontend / dağıtım
 
-## Güvenlik sınırları
+- [API sözleşmesi](../docs/API.md) ve [frontend rehberi](../docs/FRONTEND_HANDOFF.md) kullanılmalı.
+- Ayrı frontend geliştirme sunucusu `/api` çağrılarını bu sunucuya proxy etmelidir; backend'in kendisinde Vite veya statik dosya sunumu yoktur.
+- Üretimde HTTPS reverse proxy üzerinden aynı origin kullanın. Sunucu `127.0.0.1` üzerinde dinler; CORS herkese açılmamıştır.
+- Eski statik Vercel demo ve bağımsız Vercel yeniden ifade etme fonksiyonu kaldırıldı. Tek giriş noktası `server/index.ts` dosyasıdır; `/api/reword` oturum kontrollüdür.
+- `npm run build` yalnız tip kontrolüdür; `dist/` oluşturulmaz. Dağıtımda Node 24+ ile `npm start` çalıştırılır.
 
-Ortak PIN halen demo içindir. Oturumlar 12 saat sonra sona erer; girişler IP başına dakikada 10 istekle sınırlıdır. Proxy arkasında bütün kullanıcılar aynı socket IP'sini paylaşabilir; üretimde güvenilir proxy ve dağıtık hız sınırlaması ayrıca tasarlanmalıdır.
+## Korunan davranışlar
 
-Sağlık verisi için gerçek kimlik sistemi, TLS, disk şifreleme, yedekleme, denetim izi, veri saklama politikası ve klinik doğrulama olmadan üretime çıkmayın. SQLite şeması eksik kolonları ekler; bu henüz sürümlü migration altyapısı değildir.
+API yolları, rol filtreleri, gecikme simülasyonu ve varsayılan veritabanı adı değişmedi. Check-in hâlâ kişi+gün anahtarlı tam günlük kayıttır. Ortam değiştirmek bağımsız görev veritabanı oluşturmaz.
+
+Ortak PIN yalnız demo içindir. Oturumlar 12 saatte sona erer; girişler socket IP başına dakikada 10 istekle sınırlıdır. Proxy arkasında güvenilir istemci IP'si ve dağıtık kota tasarımı ayrıca gerekir. Sürüm kontrollü migration, pagination, disk/TLS şifrelemesi ve gerçek kimlik sistemi üretim öncesi işlerdir.

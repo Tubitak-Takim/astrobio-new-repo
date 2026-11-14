@@ -1,5 +1,5 @@
-// Backend: API + SQLite database file. Uses only what ships with Node 24.
-// It imports the SAME rule file the screens use, so there is one copy of the rules.
+// Astrobio backend: HTTP API + SQLite. Uses only what ships with Node 24.
+// Health rules live in UI-independent domain modules under src/.
 //
 // Sign-in and privacy are enforced HERE, not only on screen:
 //   crew member     -> own medical data only
@@ -22,7 +22,7 @@ import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { DatabaseSync } from 'node:sqlite'
-import { allowed, reword, rewordEnabled } from '../api/reword.js'
+import { allowed, reword, rewordEnabled } from './reword.js'
 import { CREW, MISSION_DAYS } from '../src/data/simulatedCrew.ts'
 import { isMission, linkDelay } from '../src/data/missions.ts'
 import { DEMO_PIN, USERS, canSee, type User } from '../src/data/users.ts'
@@ -32,6 +32,7 @@ import { validateEmergencySteps } from '../src/validate.ts'
 import { canReadEmergency, canReadEvent, canReadMessage, MESSAGE_MAX_CHARS, REPORT_MAX_CHARS } from '../src/access.ts'
 import { assessmentFor } from '../src/assessment.ts'
 import { readJson, rateLimiter, RequestError } from './http.ts'
+import { explainLocally, localAiStatus } from './localAi.ts'
 
 const PORT = Number(process.env.API_PORT ?? 8787)
 const dbFile = process.env.DB_FILE ?? 'data/crew-health.sqlite'
@@ -53,6 +54,7 @@ for (const [table, column, type] of [['checkins', 'by_user', 'TEXT'], ['events',
 }
 const sessionLifetimeMs = 12 * 60 * 60 * 1000
 const allowLogin = rateLimiter(10, 60_000)
+const allowLocalAi = rateLimiter(6, 60_000)
 
 // The demo PIN is stored as a salted hash, the way a real password would be.
 const salt = randomBytes(16)
@@ -177,6 +179,23 @@ const server = createServer(async (req, res) => {
 
     if (method === 'GET' && path === '/api/state') return send(res, 200, stateFor(user))
 
+    if (method === 'GET' && path === '/api/ai/status') return send(res, 200, await localAiStatus())
+
+    if (method === 'POST' && path === '/api/ai/explain') {
+      if (user.role === 'surgeon') return send(res, 403, { error: 'Earth can only read reports delivered to it.' })
+      const body = await readJson(req)
+      const mission = body.mission ?? 'mars'
+      const language = body.language ?? 'en'
+      if (!validDay(body.day) || !isMission(mission) || (language !== 'tr' && language !== 'en') || typeof body.crewId !== 'string' || typeof body.findingId !== 'string') return send(res, 400, { error: 'Provide crewId, findingId, day, mission and language (tr/en).' })
+      if (body.crewId !== 'cabin' && !canSee(user, body.crewId)) return send(res, 403, { error: 'You can only explain findings you may read.' })
+      const assessment = assessmentFor(user, body.day, allCheckIns(), mission, 'space')
+      const subject = assessment.subjects.find((s) => s.id === body.crewId)
+      const finding = subject?.space.find((f) => f.id === body.findingId)
+      if (!subject || !finding) return send(res, 404, { error: 'Finding not found.' })
+      if (!allowLocalAi(user.id)) return send(res, 429, { error: 'Too many local AI requests. Try again in a minute.' })
+      return send(res, 200, await explainLocally(finding, subject.info[finding.id], language))
+    }
+
     if (method === 'GET' && path === '/api/assessment') {
       if (user.role === 'surgeon') return send(res, 403, { error: 'Earth can only read reports delivered to it.' })
       const day = Number(url.searchParams.get('day') ?? 60)
@@ -265,5 +284,5 @@ const server = createServer(async (req, res) => {
 server.requestTimeout = 15_000
 server.listen(PORT, '127.0.0.1', () => {
   const address = server.address()
-  console.log(`Crew health API on http://127.0.0.1:${typeof address === 'object' && address ? address.port : PORT}`)
+  console.log(`Astrobio API on http://127.0.0.1:${typeof address === 'object' && address ? address.port : PORT}`)
 })

@@ -1,11 +1,11 @@
 // Optional: reword a handbook answer into friendlier English with Gemini.
-// This file is both a Vercel function (/api/reword) and a helper the local server imports.
+// Internal Astrobio service, called by the authenticated Node /api/reword route.
 //
 // The API key is read from the server's environment (GEMINI_API_KEY). It is never sent to
 // the browser. Without a key this feature is simply off and the app works as before.
 //
-// Safety: the model only rewrites text the handbook already produced. It is told not to add
-// facts, numbers or advice, and the original handbook text is always shown under its answer.
+// The model is instructed not to add facts, numbers or advice. This is not a guarantee.
+// Clients must retain and display the original handbook text alongside its output.
 // Needs internet, so it is not for use on a spacecraft.
 
 const MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite'
@@ -64,15 +64,4 @@ export async function reword(question, text) {
   } catch {
     return { ok: false, status: 502, error: 'Gemini could not be reached.' }
   }
-}
-
-// Vercel function entry point.
-export default async function handler(req, res) {
-  if (req.method === 'GET') return res.status(200).json({ enabled: rewordEnabled() })
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST.' })
-  const who = String(req.headers['x-forwarded-for'] ?? 'unknown').split(',')[0]
-  if (!allowed(who)) return res.status(429).json({ error: 'Too many rewording requests. Try again in a minute.' })
-  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body ?? {})
-  const r = await reword(body.question, body.text)
-  return r.ok ? res.status(200).json({ text: r.text }) : res.status(r.status).json({ error: r.error })
 }

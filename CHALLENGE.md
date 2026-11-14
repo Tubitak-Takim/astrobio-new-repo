@@ -1,5 +1,7 @@
 # Scope check against the challenge
 
+> Historical scope record for the previous prototype. Astrobio is now backend-only; the old screens and 3D assets were removed. UI coverage below describes the previous version, not the current deliverable. See README.md and docs/FRONTEND_HANDOFF.md for current scope.
+
 Challenge: "Create Health Monitoring Software for Astronauts on Space Missions", NASA Space Apps 2026.
 Source: https://www.spaceappschallenge.org/2026/challenges/health-monitoring-software/ (read on 2026-11-11). Difficulty: Intermediate.
 

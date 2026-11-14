@@ -8,3 +8,11 @@ data/*.sqlite
 data/*.sqlite-*
 *.log
 .DS_Store
+# Keep model weights, caches and local authentication out of git.
+local-ai/Modelfile
+local-ai/models/
+local-ai/*.setup-*.tmp
+*.gguf
+*.safetensors
+.cache/
+.venv/

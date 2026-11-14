@@ -1,78 +1,57 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { localCall } from './localBackend'
+import { describe, expect, it } from 'vitest'
+import { canReadEmergency, canReadEvent, canReadMessage, REPORT_MAX_CHARS } from './access'
 import { assessmentFor } from './assessment'
-import { REPORT_MAX_CHARS } from './access'
 import { USERS } from './data/users'
 import { CREW, readingOn } from './data/simulatedCrew'
 import { buildDay, reportText } from './model'
 import { validateEmergencySteps, validateReading } from './validate'
 
-const call = (user: string, method: string, path: string, body?: Record<string, unknown>) => localCall(method, path, body, `local:${user}`)
-const state = (user: string) => call(user, 'GET', '/api/state').data as {
-  messages: { body: string }[]; emergencies: unknown[]; events: unknown[]; checkIns: Record<string, unknown>
-}
+const user = (id: string) => USERS.find((u) => u.id === id)!
+const message = { from_user: 'C4', side: 'ship', to_user: null, deliver_at: 1000 }
 
-beforeEach(() => {
-  const data = new Map<string, string>()
-  vi.stubGlobal('localStorage', { getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => data.set(key, value) })
-})
-
-describe('shared backend privacy', () => {
-  it('keeps crew reports private from other crew and visible to the CMO', () => {
-    expect(call('C4', 'POST', '/api/messages', { body: 'Private report', day: 60, kind: 'report' }).status).toBe(200)
-    expect(state('C1').messages).toHaveLength(0)
-    expect(state('C4').messages).toHaveLength(1)
-    expect(state('C2').messages).toHaveLength(1)
-    expect(state('FS').messages).toHaveLength(0)
+describe('Astrobio privacy policy', () => {
+  it('keeps crew reports private from unrelated crew', () => {
+    expect(canReadMessage(user('C1'), message, 0)).toBe(false)
+    expect(canReadMessage(user('C4'), message, 0)).toBe(true)
+    expect(canReadMessage(user('C2'), message, 0)).toBe(true)
+    expect(canReadMessage(user('FS'), message, 0)).toBe(false)
+    expect(canReadMessage(user('FS'), message, 1000)).toBe(true)
   })
 
   it('delivers addressed Earth replies only after the delay', () => {
-    const now = vi.spyOn(Date, 'now').mockReturnValue(100_000)
-    try {
-      call('FS', 'POST', '/api/messages', { body: 'Reply to C4', day: 60, toUserId: 'C4', mission: 'iss' })
-      expect(state('C4').messages).toHaveLength(0)
-      now.mockReturnValue(101_000)
-      expect(state('C4').messages).toHaveLength(1)
-      expect(state('C1').messages).toHaveLength(0)
-      expect(state('C2').messages).toHaveLength(1)
-    } finally { now.mockRestore() }
+    const reply = { ...message, from_user: 'FS', side: 'earth', to_user: 'C4' }
+    expect(canReadMessage(user('C4'), reply, 0)).toBe(false)
+    expect(canReadMessage(user('C4'), reply, 1000)).toBe(true)
+    expect(canReadMessage(user('C1'), reply, 1000)).toBe(false)
+    expect(canReadMessage(user('C2'), reply, 1000)).toBe(true)
   })
 
-  it('defaults unaddressed Earth replies to the CMO', () => {
-    const now = vi.spyOn(Date, 'now').mockReturnValue(100_000)
-    try {
-      call('FS', 'POST', '/api/messages', { body: 'CMO only', day: 60, mission: 'iss' })
-      now.mockReturnValue(101_000)
-      expect(state('C1').messages).toHaveLength(0)
-      expect(state('C2').messages).toHaveLength(1)
-    } finally { now.mockRestore() }
+  it('keeps legacy unaddressed Earth replies CMO-only on the ship', () => {
+    const reply = { ...message, from_user: 'FS', side: 'earth' }
+    expect(canReadMessage(user('C1'), reply, 1000)).toBe(false)
+    expect(canReadMessage(user('C2'), reply, 1000)).toBe(true)
   })
 
-  it('does not leak emergency records or events to unrelated crew', () => {
-    expect(call('C4', 'POST', '/api/emergencies', {
-      scenario: 'Practice', patient: 'C4', day: 60, startedAt: new Date().toISOString(), steps: [{ title: 'Check', atSeconds: 0 }],
-    }).status).toBe(200)
-    expect(state('C1').emergencies).toHaveLength(0)
-    expect(state('C1').events).toHaveLength(0)
-    expect(state('C1').messages).toHaveLength(0)
-    expect(state('C2').emergencies).toHaveLength(1)
-    expect(state('C4').emergencies).toHaveLength(1)
+  it('limits emergency records to the patient, recorder and CMO', () => {
+    const record = { patient: 'C4', by_user: 'C3' }
+    expect(canReadEmergency(user('C1'), record)).toBe(false)
+    for (const id of ['C4', 'C3', 'C2']) expect(canReadEmergency(user(id), record)).toBe(true)
+    expect(canReadEvent(user('C1'), { kind: 'emergency', crew_id: 'C4' })).toBe(false)
   })
 
-  it('enforces check-in writes and assessment visibility', () => {
-    const reading = readingOn(CREW[3], 60)
-    expect(call('C1', 'PUT', '/api/checkins/C4/60', reading as unknown as Record<string, unknown>).status).toBe(403)
-    expect(call('C4', 'PUT', '/api/checkins/C4/60', reading as unknown as Record<string, unknown>).status).toBe(200)
-    expect(state('C1').checkIns).toEqual({})
-    const own = assessmentFor(USERS[0], 60, {}, 'mars', 'space')
+  it('filters assessments and includes the referenced sources', () => {
+    const own = assessmentFor(user('C1'), 60, {}, 'mars', 'space')
     expect(own.subjects.map((s) => s.id)).toEqual(['C1', 'cabin'])
-    expect(call('FS', 'GET', '/api/assessment?day=60').status).toBe(403)
-    expect(call('C1', 'GET', '/api/assessment?mission=invalid').status).toBe(400)
+    for (const s of own.subjects) for (const f of [...s.earth, ...s.space]) {
+      for (const id of f.sourceIds) expect(own.sources[id]).toBeDefined()
+    }
+    expect(assessmentFor(user('C2'), 60, {}, 'mars', 'space').subjects).toHaveLength(5)
+    expect(assessmentFor(user('FS'), 60, {}, 'mars', 'space').subjects).toHaveLength(0)
   })
 })
 
-describe('validation and persistence', () => {
-  it('accepts every generated mission report within the report budget', () => {
+describe('Astrobio validation', () => {
+  it('keeps all generated mission reports within the report budget', () => {
     for (const mission of ['iss', 'moon', 'mars'] as const) {
       for (const mode of ['earth', 'space'] as const) {
         for (let day = 1; day <= 90; day++) {
@@ -80,9 +59,6 @@ describe('validation and persistence', () => {
         }
       }
     }
-    const body = reportText(90, buildDay(90, {}), 'space')
-    expect(call('C2', 'POST', '/api/messages', { body, day: 90, kind: 'report' }).status).toBe(200)
-    expect(call('C2', 'POST', '/api/messages', { body: 'a'.repeat(4001), day: 90 }).status).toBe(400)
   })
 
   it('rejects malformed emergency steps', () => {
@@ -97,8 +73,9 @@ describe('validation and persistence', () => {
     expect(validateReading({ ...readingOn(CREW[0], 60), ijvFlow: 'invalid' }).ok).toBe(false)
   })
 
-  it('does not claim a successful save when browser storage fails', () => {
-    vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => { throw new Error('full') } })
-    expect(call('C1', 'POST', '/api/notes', { day: 60, text: 'Not saved' }).status).toBe(507)
+  it('does not expose patient information through old unscoped emergency events', () => {
+    const event = { kind: 'emergency', crew_id: null }
+    expect(canReadEvent(user('C1'), event)).toBe(false)
+    expect(canReadEvent(user('C2'), event)).toBe(true)
   })
 })
