@@ -11,6 +11,7 @@ Eski frontend tamamen kaldırıldı: React ekranları, stiller, 3D modeller, ekr
 3. Sonraki çağrılarda `Authorization: Bearer <token>` kullanın.
 4. `/api/state` kayıtları, `/api/assessment?day=60&mission=mars&mode=space` değerlendirme ve kaynakları sağlar.
 5. `401` durumunda girişe dönün; `403` için yetki açıklaması, ağ hatasında bağlantı uyarısı gösterin.
+6. İsteğe bağlı yerel AI için `/api/ai/status` ve `/api/ai/explain` kullanın. Orijinal bulguyu/uyarıyı koruyun; `generated:null` bir fallback'tir. Kurulum ve yanıt sözleşmesi [yerel AI rehberinde](LOCAL_AI.md).
 
 Kesin sözleşme: [API belgesi](API.md). TypeScript tipleri `src/assessment.ts`, `src/model.ts` ve `src/triage.ts` içindedir; ekranları veya Node sunucu kodunu tarayıcı paketine taşımayın. Kendi HTTP adaptörünüzü yazın. API'nin rol filtresini frontend filtreleriyle değiştirmeyin.
 

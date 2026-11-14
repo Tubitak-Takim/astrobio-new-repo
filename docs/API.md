@@ -22,6 +22,8 @@ Base URL geliştirmede `/api` proxy'si veya `http://127.0.0.1:8787/api`. JSON ku
 | POST | `/emergencies` | `{scenario,patient,day,startedAt,steps,mission?}`; Dünya yazamaz |
 | GET | `/reword` | İsteğe bağlı bulut yeniden ifade etme özelliğinin durumu |
 | POST | `/reword` | Yerel Node API'de oturum gerekir; `{question,text}` |
+| GET | `/ai/status` | Oturum gerekir; yerel Ollama/model envanter durumu |
+| POST | `/ai/explain` | Oturum + bulgu yetkisi; `{crewId,findingId,day,mission?,language?}`; Dünya 403 |
 
 `day`: 1–90 tam sayı. Assessment için `mission`: `iss`, `moon`, `mars`; `mode`: `earth`, `space`. Varsayılanlar: 60, `mars`, `space`. Mesaj/acil durum kayıtlarında eksik veya tanınmayan mission mevcut uyumluluk nedeniyle `mars` gecikmesini kullanır.
 
@@ -83,3 +85,11 @@ Check-in bütün ölçümleri içerir; kısmi PATCH yoktur. Görseller sıkışt
 `400`: geçersiz giriş, `401`: oturum yok/süresi dolmuş, `403`: yetki yok, `404`: bulunamadı, `413`: gövde büyük, `429`: hız sınırı, `500`: beklenmeyen sunucu hatası. Ağ hatalarını yeni frontend kendi adaptöründe ele almalıdır; tarayıcı demo arka ucu artık yoktur.
 
 Varsayılan JSON gövde sınırı 20.000 bayttır; check-in/görsel ve uzun rapor uç noktaları daha büyük sınır kullanır. API şimdilik prototip sözleşmesidir; değişikliklerde bu belgeyi ve entegrasyon testlerini birlikte güncelleyin.
+
+## Yerel AI açıklaması
+
+`/ai/explain` yalnız sunucunun kurallarıyla ürettiği tek uzay bulgusunu kullanır; istemciden ham sağlık bağlamı, prompt, model adı veya runtime URL'si almaz. Dil `tr`/`en` (varsayılan `en`). Model mevcut alarmı değiştirmez ve hiçbir kayıt yazmaz.
+
+Yanıt: `{state,original:{finding,provenance,sources},generated:string|null,experimental:true,disclaimer,model?}`. Kırmızı/eski bulgu veya model/bağlantı sorunu için HTTP 200 ve `generated:null` dönebilir; istemci `state` alanını kontrol etmelidir. Bu durumda orijinal bulgu kullanılmalıdır. Yetkisiz çağrılar 401/403, geçersiz giriş 400, bulunamayan bulgu 404, hız sınırı 429 döner. Otomatik bulut fallback yoktur.
+
+`/ai/status` oturumlu kullanıcıya yapılandırılmış servis ve model aliasının durumunu bildirir; `ready` inference veya klinik doğrulama anlamına gelmez. Kurulum, tüm durum değerleri, model seçimi ve sınırlar: [LOCAL_AI.md](LOCAL_AI.md).

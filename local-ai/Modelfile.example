@@ -1,0 +1,7 @@
+# TEMPLATE ONLY. Replace FROM with a provenance-verified, compatible MedGemma
+# GGUF after accepting the applicable HAI-DEF terms. No official 7B was found.
+# This prepares TEXT-ONLY inference; it does not enable medical image analysis.
+FROM /absolute/path/to/verified-medgemma-model.gguf
+PARAMETER temperature 0
+PARAMETER num_ctx 4096
+PARAMETER num_predict 256

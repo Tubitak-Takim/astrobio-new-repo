@@ -1,5 +1,7 @@
 # Progress
 
+> Historical development log. Earlier entries describe the previous prototype, not the current backend-only Astrobio release. See the latest entry and README.md for current scope.
+
 ## Session 1 (2026-11-10)
 
 ### Done
@@ -145,3 +147,32 @@ marked "demo only" are our wording. The database keeps test messages from develo
 - Added HTTP integration, privacy, validation, report budget and regression tests. Updated Vitest and added CI.
 - Verification: 47 tests passed; TypeScript and production build passed; npm audit reported zero vulnerabilities. The reference frontend still has chunks larger than 500 kB; no browser-based end-to-end or clinical validation was performed.
 - Measurement-level history, real authentication, production data protection, clinical review and the new frontend remain open; see `docs/QUALITY.md`.
+
+## Astrobio backend-only transition (2026-11-14)
+
+- Renamed the package, current documentation, server startup message and CI workflow to Astrobio.
+- Removed the old React screens, CSS, browser API adapter, localStorage demo backend, browser image helper, 3D code/assets, screenshots and generated frontend output. No replacement frontend was scaffolded.
+- Removed frontend runtime/build dependencies; retained only TypeScript, Node types and Vitest as direct development dependencies. Vitest may still use Vite internally as a test tool.
+- Moved optional rewording to `server/reword.js` and removed its standalone Vercel handler. The authenticated Node `/api/reword` route remains available.
+- Preserved domain rules, sources, simulation, validation, handbook content, API routes and existing database path. Replaced browser-demo tests with direct privacy-policy tests and retained HTTP coverage.
+- `npm run dev` now starts only the watched Node API. `npm start` / `npm run server` start it without watching. `npm run build` is a type check and does not generate a web bundle.
+- Verification: all 47 tests and TypeScript checks passed; npm audit reported no vulnerabilities; documentation links passed and the existing SQLite file's SHA256 was unchanged.
+- The new frontend will be developed independently by the team using the API contract in `docs/API.md`.
+
+## Local AI / MedGemma preparation (2026-11-14)
+
+- Read Google's official MedGemma catalog, model card, getting-started guide and HAI-DEF terms, plus Ollama import/chat/inventory/local-only documentation. Official releases found: MedGemma 1.5 4B and MedGemma 1 4B/27B; no official 7B found. No substitute model selected.
+- Observed approximately 32 GB system RAM, an RTX 4060 Laptop GPU with 8 GB VRAM, and installed but unreachable Ollama. A verified quantized 4B model is the recommended first candidate, subject to user selection and license review; actual GPU inference remains untested.
+- Added an opt-in, loopback-only Ollama adapter and authenticated `/api/ai/status` / role-filtered `/api/ai/explain` endpoints. Only a server-selected finding and its sources are sent; no free-form medical chat, images, database changes or automatic cloud fallback.
+- Added conservative bypasses for urgent/stale data, response/time/concurrency limits, remote-model rejection, original-text retention and an explicitly limited new-number check.
+- Added `npm run ai:check`, a non-executable-until-configured Modelfile template, environment examples and research/setup documentation in `docs/LOCAL_AI.md`. Existing `.env`, model weights and model terms were not modified/downloaded/accepted.
+- Verification: 63 tests passed using mocked/local protocol-stub inference, TypeScript passed, audit reported zero vulnerabilities, and documentation links passed. The real readiness check returned disabled as expected; no real-model performance or clinical validation was performed.
+
+## Consent-based local AI installer (2026-11-14)
+
+- The user selected/downloaded the Ollama tag `medgemma1.5:4b` and shared a generated API response. A later hardware inspection found working NVIDIA driver visibility but no `ollama-cuda` package on EndeavourOS; actual GPU inference still needs verification.
+- Added `npm run setup:local-ai` with an interactive confirmation or explicit `--yes`, existing-model reuse, missing-model streaming download, a synthetic production smoke test and loaded-model CPU/GPU/mixed/unknown reporting.
+- The installer validates local-only endpoints and remote-model metadata, does not run system installers or start background services, and prints setup instructions if Ollama is unavailable.
+- Existing configured models/settings are preserved unless explicitly changed. Successful setup enables only local AI dotenv fields, saves a private backup when needed and writes a reviewable `local-ai/model-lock.json`. Digest changes require `--update-lock`; generation/verification happens before settings are saved.
+- Added safe dotenv persistence, digest validation, download, smoke and filesystem tests. Verification: 80 tests passed, TypeScript passed, audit reported zero vulnerabilities, documentation links and diff whitespace checks passed.
+- The actual CLI help was exercised; the real installer was not run with consent, so no real model download/generation or user `.env` change was performed in this implementation task. Users should run the installer themselves and review/commit the generated model lock.

@@ -23,6 +23,20 @@ npm audit
 
 Astrobio geçiş doğrulaması: **47 test başarılı**, TypeScript kontrolü başarılı, `npm audit` **0 açık** bildirdi. Belge bağlantıları ve frontend dosyalarının kaldırılması kontrol edildi; mevcut SQLite dosyasının SHA256 değeri değişmedi. Klinik doğrulama veya yeni frontend için tarayıcı testi yapılmadı.
 
+## Yerel AI hazırlığı doğrulaması
+
+Yerel AI eklemesi sonrası **63 test başarılı**, TypeScript kontrolü başarılı, `npm audit` **0 açık** bildirdi. Yeni testler loopback URL kısıtı, cloud alias/remote metadata reddi, kapalı/eksik model, sayı kontrolü, timeout, tek eşzamanlı üretim, yetki izolasyonu ve kırmızı/eski bulguda modelin çağrılmamasını kapsar. HTTP testlerinde ayrı bir Ollama protokol taklidi kullanılır.
+
+`npm run ai:check` mevcut yapılandırmada `disabled` döndü; bu durumda çıkış kodunun 1 olması beklenir. Gerçek model indirilmedi, seçilmedi veya çalıştırılmadı. Prompt ve sayı kontrolü güvenlik/klinik doğruluk garantisi değildir; gerçek model kalite/GPU ölçümü ve Türkçe değerlendirme sonraki aşamadır. Ayrıntılar: [LOCAL_AI.md](LOCAL_AI.md).
+
+Bu paragraf ilk hazırlık anını kaydeder. Kullanıcı daha sonra `medgemma1.5:4b` modelini indirip API yanıtını paylaştı; bu, üretimin çalıştığını gösterir. Sistematik kalite/GPU doğrulamasıyla karıştırılmamalıdır.
+
+## Kurulum aracı doğrulaması
+
+`npm run setup:local-ai` eklemesi sonrası **80 test başarılı**, TypeScript kontrolü başarılı ve bağımlılık taramasında **0 açık**. Testler sahte HTTP yanıtlarıyla model indirme ilerlemesini, hata/eksik üretim davranışını, CPU/GPU/MIXED/UNKNOWN raporunu, digest uyuşmazlığı ve uzak model reddini kapsar. Geçici dizin testleri `.env` değerlerinin/yorumlarının korunmasını, özel izinli yedeği, tekrar çalıştırmayı ve eşzamanlı değişiklikte durmayı doğrular.
+
+Gerçek CLI'nin `--help` yolu ayrıca çalıştırıldı. Kullanıcının gerçek modeline üretim isteği gönderen veya `.env` dosyasını değiştiren tam kurulum burada çalıştırılmadı; indirme/sistem kurulumu yapılmadı. İlk gerçek çalıştırma kullanıcı onayıyla yapılmalıdır. Model kilidi ilk başarılı çalıştırmada oluşur ve inceleme sonrası ekipçe commit edilmelidir.
+
 ## Backend kabul listesi
 
 - [ ] `npm run dev` yalnız Astrobio API'yi başlatıyor; dosya değişikliğinde yeniden yükleniyor.

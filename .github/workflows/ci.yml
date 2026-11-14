@@ -1,4 +1,4 @@
-name: Integration checks
+name: Astrobio backend checks
 on: [push, pull_request]
 jobs:
   verify:

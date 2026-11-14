@@ -8,6 +8,7 @@ Sorumlu: **Işıkhan IŞIK**. API entegrasyonu: Muhammet Kerim Şahin. Değerlen
 - `src/handbook.ts`: İngilizce anahtar kelime eşleştirmeli çevrimdışı asistan; semantik dil modeli değil.
 - `src/data/sources.ts`: kaynakların `verified`, `partial`, `demo` etiketleri; klinik doğrulama değildir.
 - `server/reword.js`: isteğe bağlı Gemini yeniden ifade etme. Yalnız yönergeyle sınırlandırılıyor; modelin yeni bilgi üretmeyeceği matematiksel olarak garanti edilmiyor. Yeni frontend özgün metni de göstermelidir.
+- `server/localAi.ts`: yalnız yerel Ollama'ya bağlanan deneysel tek-bulgu açıklama adaptörü. Model seçilmedi/indirilmedi; varsayılan kapalı. Resmi katalogda MedGemma 7B bulunmadı; 4B/27B seçenekleri ve donanım değerlendirmesi [yerel AI araştırmasında](LOCAL_AI.md).
 
 ## Önerilen ilk teslimatlar
 
