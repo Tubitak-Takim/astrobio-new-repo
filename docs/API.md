@@ -1,4 +1,4 @@
-# API sözleşmesi
+# Astrobio API sözleşmesi
 
 Sorumlu: **Muhammet Kerim Şahin**. Frontend: **Elif Nur Özek**. Entegrasyon doğrulaması: **Zehra Kaygısız**.
 
@@ -60,7 +60,7 @@ Kesin tipler: `src/assessment.ts`, `src/model.ts` (`Subject`, `Provenance`), `sr
 
 `{user,now,messages,checkIns,events,notes,tasksDone,emergencies}`. `now` sunucunun epoch milisaniyesidir. `checkIns` anahtarı `C1:60` biçimindedir. Dünya kullanıcısına check-in/not/acil durum tabloları verilmez; yalnız gecikmesi dolmuş iletiler ve kendi gönderdiği iletiler döner.
 
-Yazma uç noktaları genellikle güncel state'i döner. Giriş ve çıkış bunun istisnasıdır. Mevcut frontend API adaptörü ve tipleri `src/api.ts` içindedir.
+Yazma uç noktaları genellikle güncel state'i döner. Giriş ve çıkış bunun istisnasıdır. Eski frontend API adaptörü kaldırıldı; yeni arayüz kendi HTTP adaptörünü geliştirmelidir.
 
 ## Mesaj gizliliği ve boyutlar
 
@@ -80,6 +80,6 @@ Check-in bütün ölçümleri içerir; kısmi PATCH yoktur. Görseller sıkışt
 
 ## Hata durumları
 
-`400`: geçersiz giriş, `401`: oturum yok/süresi dolmuş, `403`: yetki yok, `404`: bulunamadı, `413`: gövde büyük, `429`: hız sınırı, `500`: beklenmeyen sunucu hatası. Tarayıcı demo arka ucu saklama başarısızlığında `507` döndürür. Ağ hataları frontend adaptöründe `status: 0` ile temsil edilir.
+`400`: geçersiz giriş, `401`: oturum yok/süresi dolmuş, `403`: yetki yok, `404`: bulunamadı, `413`: gövde büyük, `429`: hız sınırı, `500`: beklenmeyen sunucu hatası. Ağ hatalarını yeni frontend kendi adaptöründe ele almalıdır; tarayıcı demo arka ucu artık yoktur.
 
 Varsayılan JSON gövde sınırı 20.000 bayttır; check-in/görsel ve uzun rapor uç noktaları daha büyük sınır kullanır. API şimdilik prototip sözleşmesidir; değişikliklerde bu belgeyi ve entegrasyon testlerini birlikte güncelleyin.
