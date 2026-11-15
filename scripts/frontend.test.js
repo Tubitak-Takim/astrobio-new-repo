@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { crewFixture } from './crew-data.fixture.js';
+import { lightPlanFixture } from './light-plan.fixture.js';
 
 let requests, fetchMock, adapter;
 const user = {id:'C1',name:'Test Crew',role:'crew',title:'Commander'};
@@ -28,6 +29,28 @@ beforeEach(()=>{
 afterEach(()=>{adapter?.dispose();vi.restoreAllMocks();vi.unstubAllGlobals();document.body.replaceChildren();});
 
 describe('frontend API adapter',()=>{
+  it('links an automatic chat recommendation to the matching astronaut/day/mission plan',async()=>{
+    const original=fetchMock.getMockImplementation();
+    fetchMock.mockImplementation((path,options)=>path==='/api/chat'?Promise.resolve({ok:true,json:async()=>({reply:'Saved report.',lightReview:{status:'review',action:'Review your ambient light and sleep plan; not treatment.'},healthRecord:{status:'saved',observation:{crewId:'C1',day:60,mission:'mars',receivedAt:'2026-11-15T12:00:00Z',symptoms:['fatigue'],values:{}}}})}):original(path,options));
+    await boot('ai',true);document.querySelector('#backend-prompt').value='I am tired';submit('#backend-chat-form');
+    await vi.waitFor(()=>expect(document.querySelector('#backend-chat a')?.getAttribute('href')).toBe('light-therapy.html?crewId=C1&day=60&mission=mars'));
+  });
+  it('mounts circadian planning from its own route without a duplicate backend connection panel',async()=>{
+    const original=fetchMock.getMockImplementation();
+    fetchMock.mockImplementation((path,options)=>path.startsWith('/api/light-plan')?Promise.resolve({ok:true,json:async()=>lightPlanFixture}):original(path,options));
+    await boot('lighting',true);
+    await wait('#light-calendar');
+    expect(document.body.textContent).toContain('Light & Circadian Care');
+    expect(document.querySelector('#backend-panel')).toBeNull();
+    expect(document.querySelector('#backend-subject option[value=cabin]')).toBeNull();
+  });
+  it('lists each saved symptom in the receipt instead of incorrectly claiming headache',async()=>{
+    const original=fetchMock.getMockImplementation();
+    fetchMock.mockImplementation((path,options)=>path==='/api/chat'?Promise.resolve({ok:true,json:async()=>({reply:'Recorded self-report.',healthRecord:{status:'saved',observation:{crewId:'C1',day:60,mission:'mars',receivedAt:'2026-11-15T12:00:00Z',values:{},symptoms:['dizziness','nausea']}}})}):original(path,options));
+    await boot('ai',true);document.querySelector('#backend-prompt').value='Başım dönüyor ve midem bulanıyor';submit('#backend-chat-form');
+    await vi.waitFor(()=>expect(document.querySelector('#backend-chat').textContent).toContain('Self-reported: dizziness, nausea'));
+    expect(document.querySelector('#backend-chat').textContent).not.toContain('Headache: yes');
+  });
   it('mounts the visible live workspace without copying the generic backend connection panel',async()=>{
     const original=fetchMock.getMockImplementation();
     fetchMock.mockImplementation((path,options)=>path.startsWith('/api/observations')?Promise.resolve({ok:true,json:async()=>({observations:[],total:0,serverTime:'2026-11-15T12:00:00Z'})}):original(path,options));

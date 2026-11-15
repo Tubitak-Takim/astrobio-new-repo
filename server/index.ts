@@ -38,7 +38,9 @@ import { MAX_VOICE_BYTES, ReplyReceipts, synthesizeVoice, transcribeVoice, voice
 import { serveFrontend } from './static.ts'
 import { healthContextFor, requestsHealthRecords } from './healthContext.ts'
 import { crewDatasetFor, ensureCrewDataset } from './crewDataset.ts'
-import { directHeadacheReport, ensureObservations, readObservations, saveObservation } from './observations.ts'
+import { ensureObservations, readObservations, saveObservation } from './observations.ts'
+import { directSymptomReports } from '../src/symptoms.ts'
+import { ensureLightPlan, lightContext, lightPlanFor, saveLightAction, saveLightPreferences, saveLightStress, syncLightReview } from './lightPlan.ts'
 
 const PORT = Number(process.env.API_PORT ?? 8787)
 const dbFile = process.env.DB_FILE ?? 'data/crew-health.sqlite'
@@ -61,6 +63,8 @@ for (const [table, column, type] of [['checkins', 'by_user', 'TEXT'], ['events',
 const sessionLifetimeMs = 12 * 60 * 60 * 1000
 ensureCrewDataset(db)
 ensureObservations(db)
+ensureLightPlan(db)
+const allowLightWrites=rateLimiter(30,60_000)
 const allowIngest = rateLimiter(120,60_000)
 const allowLogin = rateLimiter(10, 60_000)
 const allowLocalAi = rateLimiter(6, 60_000)
@@ -83,7 +87,7 @@ function allCheckIns(): CheckIns {
     out[keyOf(String(row.crew_id), Number(row.day))] = JSON.parse(String(row.reading))
     updated[keyOf(String(row.crew_id),Number(row.day))]=String(row.updated_at)
   }
-  out[OBSERVATIONS]=readObservations(db).filter(o=>!updated[keyOf(o.crewId,o.day)] || o.measuredAt>updated[keyOf(o.crewId,o.day)])
+  out[OBSERVATIONS]=readObservations(db).flatMap(o=>!updated[keyOf(o.crewId,o.day)] || o.measuredAt>updated[keyOf(o.crewId,o.day)] ? [o] : o.symptoms?.length ? [{...o,values:{}}] : [])
   return out
 }
 
@@ -195,12 +199,24 @@ const server = createServer(async (req, res) => {
 
     if (method === 'GET' && path === '/api/state') return send(res, 200, stateFor(user))
 
+    if(path==='/api/light-plan' && method==='GET') {
+      const c=lightContext(user,{crewId:url.searchParams.get('crewId') ?? user.id,day:Number(url.searchParams.get('day') ?? 60),mission:url.searchParams.get('mission') ?? 'mars'})
+      return send(res,200,lightPlanFor(db,c,allCheckIns()))
+    }
+    if((path==='/api/light-plan/preferences' && method==='PUT') || (['/api/light-plan/stress','/api/light-plan/actions'].includes(path) && method==='POST')) {
+      const body=await readJson(req),c=lightContext(user,body)
+      if(!allowLightWrites(user.id))return send(res,429,{error:'Too many lighting-plan updates. Try again in a minute.'})
+      const receipt=path.endsWith('/preferences')?saveLightPreferences(db,user,c,body.preferences):path.endsWith('/stress')?saveLightStress(db,user,c,body.score):saveLightAction(db,user,c,body.kind,body.action)
+      return send(res,200,{persisted:true,receipt,plan:lightPlanFor(db,c,allCheckIns())})
+    }
+
     if (path === '/api/observations' && (method==='GET' || method==='POST')) {
       if(user.role==='surgeon') return send(res,403,{error:'Onboard observations are not available to Earth.'})
       if(method==='POST') {
         if(!allowIngest(user.id)) return send(res,429,{error:'Too many measurements. Try again in a minute.'})
         const observation=saveObservation(db,user,await readJson(req))
-        return send(res,201,{persisted:true,observation})
+        const lightReview=syncLightReview(db,observation,allCheckIns())
+        return send(res,201,{persisted:true,observation,lightReview})
       }
       const crewId=url.searchParams.get('crewId') ?? user.id
       const day=Number(url.searchParams.get('day') ?? 60),mission=url.searchParams.get('mission') ?? 'mars'
@@ -245,19 +261,21 @@ const server = createServer(async (req, res) => {
       // An existing urgent finding for this subject takes priority over social chat.
       let urgentFinding = subject.space.find((f) => f.level === 'red')
       if (!urgentFinding && conversationRoute(message, false) !== 'urgent' && !allowChat(user.id)) return send(res, 429, { error: 'Too many chat requests.' })
-      const qualifies=directHeadacheReport(message)
+      const symptoms=directSymptomReports(message)
+      const qualifies=symptoms.length>0
       const canPersist=qualifies && crewId===user.id && allowIngest(user.id)
-      const savedReport=canPersist ? saveObservation(db,user,{crewId:user.id,day,mission,source:'chat_self_report',values:{headache:true}},true) : null
+      const savedReport=canPersist ? saveObservation(db,user,{crewId:user.id,day,mission,source:'chat_self_report',symptoms},true) : null
       if(savedReport) {
         checkIns=allCheckIns()
         subject=assessmentFor(user,day,checkIns,mission,'space').subjects.find(s=>s.id===crewId)!
         urgentFinding=subject.space.find(f=>f.level==='red')
       }
+      const lightReview=savedReport?syncLightReview(db,savedReport,checkIns):null
       const finding = urgentFinding ?? (requested ? subject.space.find(f=>f.id===requested.id) : undefined)
       const context = !finding && (savedReport || requestsHealthRecords(message)) ? healthContextFor(user, crewId, day, mission, checkIns) : undefined
       const result = await conversationTurn(message, language as 'tr' | 'en', finding, finding ? subject.info[finding.id] : undefined, context ?? undefined)
       const replyId = replyReceipts.issue(user.id, result.reply)
-      return send(res, 200, { ...result, replyId, replyExpiresInSeconds: 120, persisted:!!savedReport, healthRecord:{status:savedReport?'saved':'not_saved',reason:savedReport?'Direct self-reported headache saved.':qualifies?crewId!==user.id?'Selected astronaut differs from signed-in account; no automatic attribution.':'Health-record rate limit reached; symptom not recorded.':'No unambiguous supported self-report detected.',observation:savedReport} })
+      return send(res, 200, { ...result, replyId, replyExpiresInSeconds: 120, persisted:!!savedReport,lightReview, healthRecord:{status:savedReport?'saved':'not_saved',reason:savedReport?'Direct self-reported symptoms saved (not a diagnosis).':qualifies?crewId!==user.id?'Selected astronaut differs from signed-in account; no automatic attribution.':'Health-record rate limit reached; symptom not recorded.':'No unambiguous supported self-report detected.',observation:savedReport} })
     }
 
     if (method === 'GET' && path === '/api/voice/status') return send(res, 200, voiceStatus())
@@ -328,6 +346,8 @@ const server = createServer(async (req, res) => {
       db.prepare(
         'INSERT INTO checkins (crew_id, day, reading, updated_at, by_user) VALUES (?, ?, ?, ?, ?) ON CONFLICT (crew_id, day) DO UPDATE SET reading = excluded.reading, updated_at = excluded.updated_at, by_user = excluded.by_user',
       ).run(crew.id, day, JSON.stringify(v.reading), nowIso(), user.id)
+      const updatedReadings=allCheckIns()
+      for(const mission of ['iss','moon','mars'] as const)syncLightReview(db,{crewId:crew.id,day,mission},updatedReadings)
       const subject = buildDay(day, allCheckIns()).find((s) => s.id === crew.id)!
       const urgent = subject.space.some((f) => f.level === 'red')
       logEvent('checkin', `${crew.name}, day ${day}: check-in by ${user.name}. ${urgent ? 'URGENT finding' : `${flagged(subject.space)} flagged`}`, crew.id)

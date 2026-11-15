@@ -3,11 +3,11 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { mountLiveMonitor } from '../frontend/js/live-monitor.js';
 let dispose;
 afterEach(()=>{dispose?.();vi.useRealTimers();document.body.replaceChildren();});
-function boot(){
+function boot(symptoms=[]){
   const api=vi.fn(async(path,options)=>{
     if(options)return {observation:{id:7,receivedAt:'2026-11-15T12:00:00Z'}};
     if(path.startsWith('/api/assessment'))return {subjects:[]};
-    return {total:1,serverTime:'2026-11-15T12:00:00Z',observations:[{id:7,source:'demo_stream',measuredAt:'2026-11-15T12:00:00Z',receivedAt:'2026-11-15T12:00:00Z',values:{restingHrBpm:77}}]};
+    return {total:1,serverTime:'2026-11-15T12:00:00Z',observations:[{id:7,source:'demo_stream',measuredAt:'2026-11-15T12:00:00Z',receivedAt:'2026-11-15T12:00:00Z',values:{restingHrBpm:77},symptoms}]};
   });
   dispose=mountLiveMonitor(document.body,api,{crewId:'C1',day:60,mission:'mars'});return api;
 }
@@ -31,4 +31,8 @@ it('sends only supplied manual fields and leaves empty fields unchanged',async()
   const [,options]=api.mock.calls.find(([,options])=>options?.method==='POST');
   expect(JSON.parse(options.body)).toMatchObject({source:'manual_entry',values:{restingHrBpm:99}});
   expect(Object.keys(JSON.parse(options.body).values)).toEqual(['restingHrBpm']);
+});
+it('shows saved non-headache symptoms in incoming history as self-reports',async()=>{
+  boot(['nausea','dizziness']);
+  await vi.waitFor(()=>expect(document.querySelector('#live-events').textContent).toContain('Self-reported symptoms (not diagnoses): nausea, dizziness'));
 });

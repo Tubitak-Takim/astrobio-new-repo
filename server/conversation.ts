@@ -3,7 +3,7 @@ import { directChat } from './directChat.ts'
 import type { Finding } from '../src/triage.ts'
 import type { Provenance } from '../src/model.ts'
 import { hasGroundedNumbers, requestsHealthRecords, type HealthContext } from './healthContext.ts'
-import { directHeadacheReport } from './observations.ts'
+import { directSymptomReports, urgentSymptomReport, SYMPTOMS } from '../src/symptoms.ts'
 
 export type Language = 'tr' | 'en'
 const OPENINGS = {
@@ -37,7 +37,8 @@ export async function companionStatus() {
 export function conversationRoute(message: string, hasFinding: boolean) {
   const value = message.toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '').replace(/ı/g, 'i')
   if (/intihar|kendime zarar|yasamak istemiyorum|suicid|kill myself|self.harm|nefes alamiyorum|gogus agr|bayild|bilincini kaybet|cannot breathe|can.?t breathe|chest pain|unconscious/.test(value)) return 'urgent' as const
-  if(directHeadacheReport(message)) return 'medical' as const
+  if(urgentSymptomReport(message)) return 'urgent' as const
+  if(directSymptomReports(message).length) return 'medical' as const
   // This chooses a model, not whether a message is allowed. All non-urgent
   // free-text messages reach a model without requiring a finding selection.
   if (hasFinding || requestsHealthRecords(message) || /\b(health|healthcare|medical|symptom\w*|diagnos\w*|medicin\w*|medication\w*|pain|sleep|nutrition|exercise|blood|oxygen|heart|fever|wellness|hydration|saglik\w*|belirti\w*|ilac\w*|hastalik\w*|agri\w*|uyku\w*|beslen\w*|egzersiz\w*|nabiz\w*|ates\w*)\b/.test(value)) return 'medical' as const
@@ -94,7 +95,12 @@ function recordedValues(context: HealthContext, language: Language) {
     ? [['co2MmHg','CO₂','mmHg'],['cumulativeDoseMSv',language === 'tr' ? 'Birikimli doz' : 'Cumulative dose','mSv']]
     : [['restingHrBpm',language === 'tr' ? 'Nabız' : 'Heart rate','bpm'],['spo2Pct','SpO₂','%'],['sleepHours7d',language === 'tr' ? '7 günlük uyku ortalaması' : '7-day sleep average',language === 'tr' ? 'saat' : 'hours'],['bodyTempC',language === 'tr' ? 'Sıcaklık' : 'Temperature','°C']]
   const summary = fields.filter(([key]) => typeof values[key] === 'number').map(([key,label,unit]) => `${label}: ${values[key]} ${unit}`).join('; ')
-  const reports=(context.recentObservations ?? []).filter(o=>o.values.headache!==undefined).map(o=>language==='tr'?`Gün ${o.day}: baş ağrısı ${o.values.headache?'var':'yok'} (${o.source}, ${o.measuredAt})`:`Day ${o.day}: headache ${o.values.headache?'reported':'not reported'} (${o.source}, ${o.measuredAt})`).join('; ')
+  const reports=(context.recentObservations ?? []).filter(o=>o.symptoms?.length || o.values.headache!==undefined).map(o=>{
+    const symptoms=o.symptoms?.filter(id=>id!=='headache').map(id=>SYMPTOMS[id][language]).join(', ')
+    const headache=o.symptoms?.includes('headache') || o.values.headache===true
+    const parts=[...(headache?[language==='tr'?'baş ağrısı var':'headache reported']:o.values.headache===false?[language==='tr'?'baş ağrısı yok':'headache not reported']:[]),...(symptoms?[`${language==='tr'?'bildirilen belirtiler':'reported symptoms'}: ${symptoms}`]:[])]
+    return `${language==='tr'?'Gün':'Day'} ${o.day}: ${parts.join('; ')} (${o.source}, ${o.measuredAt})`
+  }).join('; ')
   return `${language === 'tr' ? 'Kayıt değerleri' : 'Recorded values'}: ${summary}.${reports?' '+reports:''}`
 }
 

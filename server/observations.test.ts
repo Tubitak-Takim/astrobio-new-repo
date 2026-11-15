@@ -59,4 +59,45 @@ describe('append-only partial observations',()=>{
       expect(readObservations(db)).toHaveLength(2)
     }finally{db.close()}
   })
+  it('stores non-measurement symptoms without inventing vitals or diagnoses',()=>{
+    const db=new DatabaseSync(':memory:');ensureObservations(db)
+    try {
+      const before=getReading({},CREW[0],60)
+      const o=saveObservation(db,USERS[0],{crewId:'C1',day:60,mission:'mars',source:'chat_self_report',symptoms:['dizziness','nausea','feverish']},true)
+      expect(o.values).toEqual({})
+      expect(o.symptoms).toEqual(['dizziness','nausea','feverish'])
+      const checkIns:CheckIns={};checkIns[OBSERVATIONS]=readObservations(db)
+      expect(getReading(checkIns,CREW[0],60)).toEqual(before)
+      expect(healthContextFor(USERS[0],'C1',61,'mars',checkIns)!.recentObservations[0].symptoms).toEqual(o.symptoms)
+      expect(healthContextFor(USERS[0],'C1',59,'mars',checkIns)!.recentObservations).toEqual([])
+      expect(healthContextFor(USERS[0],'C1',61,'iss',checkIns)!.recentObservations).toEqual([])
+      expect(healthContextFor(USERS[1],'C4',61,'mars',checkIns)!.recentObservations).toEqual([])
+      for(const symptoms of [['diabetes'],['nausea','nausea'],'nausea',[{id:'nausea'}]]) expect(()=>saveObservation(db,USERS[0],{crewId:'C1',day:60,mission:'mars',source:'manual_entry',symptoms})).toThrow()
+      expect(()=>saveObservation(db,USERS[0],{crewId:'C1',day:60,mission:'mars',source:'manual_entry',symptoms:['headache'],values:{headache:false}})).toThrow()
+    }finally{db.close()}
+  })
+  it('migrates old observations without losing existing values and remains idempotent',()=>{
+    const db=new DatabaseSync(':memory:')
+    try {
+      db.exec(`CREATE TABLE health_observations (id INTEGER PRIMARY KEY AUTOINCREMENT, crew_id TEXT NOT NULL, day INTEGER NOT NULL, mission TEXT NOT NULL, source TEXT NOT NULL, measured_at TEXT NOT NULL, received_at TEXT NOT NULL, by_user TEXT NOT NULL, values_json TEXT NOT NULL);
+        INSERT INTO health_observations VALUES (1,'C1',60,'mars','chat_self_report','2026-11-15T00:00:00Z','2026-11-15T00:00:00Z','C1','{"headache":true}');`)
+      ensureObservations(db);ensureObservations(db)
+      expect(readObservations(db)).toHaveLength(1)
+      expect(readObservations(db)[0].values).toEqual({headache:true})
+      expect(readObservations(db)[0].symptoms).toBeUndefined()
+    }finally{db.close()}
+  })
+  it('keeps a saved symptom in bounded context even after a burst of vital samples',()=>{
+    const db=new DatabaseSync(':memory:');ensureObservations(db)
+    try {
+      const base={crewId:'C1',day:60,mission:'mars',source:'manual_entry'}
+      const report=saveObservation(db,USERS[0],{...base,symptoms:['nausea']})
+      for(let i=0;i<20;i++)saveObservation(db,USERS[0],{...base,values:{restingHrBpm:80+i}})
+      const checkIns:CheckIns={};checkIns[OBSERVATIONS]=readObservations(db)
+      const context=healthContextFor(USERS[0],'C1',60,'mars',checkIns)!
+      expect(context.recentObservations).toHaveLength(8)
+      expect(context.recentObservations.some(o=>o.id===report.id)).toBe(true)
+      expect(context.values).toMatchObject({restingHrBpm:99})
+    }finally{db.close()}
+  })
 })

@@ -6,12 +6,13 @@
 import type { MissionId } from './data/missions.ts'
 import { CREW, MISSION_DAYS, cabinOn, readingOn, type CrewMember } from './data/simulatedCrew.ts'
 import { SOURCES } from './data/sources.ts'
+import type { SymptomId } from './symptoms.ts'
 import { assessCabin, assessCrew, type CrewReading, type Finding, type ImageAttachment, type Mode } from './triage.ts'
 
 export const CABIN_ID = 'cabin'
 
 export const OBSERVATIONS = Symbol('observations')
-export interface Observation { id:number; crewId:string; day:number; mission:MissionId; source:string; measuredAt:string; receivedAt:string; values:Partial<CrewReading> }
+export interface Observation { id:number; crewId:string; day:number; mission:MissionId; source:string; measuredAt:string; receivedAt:string; values:Partial<CrewReading>; symptoms?:SymptomId[] }
 export type CheckIns = Record<string, CrewReading> & { [OBSERVATIONS]?: Observation[] }
 export const observationsFor = (checkIns:CheckIns,crewId:string,day:number,mission:MissionId) => (checkIns[OBSERVATIONS] ?? []).filter(o=>o.crewId===crewId && o.day===day && o.mission===mission)
 export const keyOf = (crewId: string, day: number) => `${crewId}:${day}`
@@ -129,7 +130,7 @@ export function buildDay(day: number, checkIns: CheckIns, mission: MissionId = '
       earth: assessCrew(r, c.baseline, cabin, 'earth'),
       space,
       info: Object.fromEntries(space.map((f) => {
-        const keys:Record<string,string[]>={vitals:['restingHrBpm','spo2Pct'],basics:['bodyTempC','systolicBp','diastolicBp','glucoseMgDl'],headache:['headache']}
+        const keys:Record<string,string[]>={vitals:['restingHrBpm','spo2Pct'],basics:['bodyTempC','systolicBp','diastolicBp','glucoseMgDl'],headache:['headache'],onsd:['visionChange']}
         const reports=observationsFor(checkIns,c.id,day,mission).filter(o=>Object.keys(o.values).some(k=>keys[f.id]?.includes(k)))
         const p=provenance(f.id,day,manual)
         if(reports.length) p.source=`Mixed reading; latest update: ${reports.at(-1)!.source} (${reports.at(-1)!.measuredAt}). Only supplied fields updated.`

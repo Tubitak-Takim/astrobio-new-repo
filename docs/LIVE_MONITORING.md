@@ -40,6 +40,7 @@ Allowed public sources: `manual_entry`, `demo_stream`, `external_api`. `external
 | diastolicBp | 30–160 |
 | glucoseMgDl | 20–600 |
 | headache | boolean |
+| visionChange | boolean (self-reported change, not an ultrasound measurement) |
 
 These are input checks, not medical reference ranges. Unknown fields, empty payloads, strings in numeric fields and unauthorized subjects are rejected. Ingestion is limited to 120 requests/minute/account. Return: HTTP **201**, `{persisted:true,observation:{id,crewId,day,mission,source,measuredAt,receivedAt,values}}`.
 
@@ -55,10 +56,35 @@ No observation update/delete API is provided in this prototype. A new explicit m
 
 ## Conservative chat writes and context
 
-Automatic extraction is deterministic, not an LLM write tool. The first supported symptom is **headache**. It accepts a narrow whole-message grammar: “Başım ağrıyor”, “Bugün başım çok ağrıyor”, “Baş ağrım var”, “I have a headache”, “I have a severe headache today”, “My head hurts right now”, and a few comparable severity/time modifiers. It deliberately rejects many valid but complex reports rather than risk incorrect attribution. Other symptoms require manual entry or a future reviewed workflow.
+Automatic extraction is deterministic, not an LLM write tool. It supports **16 symptom categories** in Turkish and English:
+
+| ID | Turkish example | English example |
+|---|---|---|
+| headache | Başım ağrıyor | I have a headache |
+| dizziness | Başım dönüyor | I feel dizzy |
+| nausea | Midem bulanıyor | I feel nauseous |
+| vomiting | Kusuyorum | I am vomiting |
+| fatigue | Çok yorgunum | I feel very tired |
+| insomnia | Uyuyamıyorum | I cannot sleep |
+| abdominal_pain | Karnım ağrıyor | My stomach hurts |
+| back_pain | Sırtım ağrıyor | I have back pain |
+| chest_pain | Göğsüm ağrıyor | I have chest pain |
+| shortness_of_breath | Nefesim daralıyor | I am short of breath |
+| palpitations | Çarpıntım var | My heart is racing |
+| cough | Öksürüyorum | I have a cough |
+| sore_throat | Boğazım ağrıyor | My throat hurts |
+| feverish | Ateşim var | I feel feverish |
+| vision_change | Bulanık görüyorum | My vision is blurry |
+| diarrhea | İshalim var | I have diarrhea |
+
+Explicit multi-symptom reports also work: **“Başım dönüyor ve midem bulanıyor”**, **“I feel dizzy and nauseous”**, or **“I have dizziness and nausea”**. Every clause must match an explicit supported self-report; an unknown/negated/third-party clause prevents the entire message from being auto-recorded. Duplicates are removed and at most eight clauses are parsed. Complex narratives, arbitrary diagnoses and other unsupported symptoms are deliberately not inferred; the not-saved receipt makes this visible.
+
+`symptoms` contains validated category IDs, not diagnoses or estimated vitals. Feverishness does not generate a temperature, palpitations do not generate a heart rate, fatigue does not generate a mood score. Headache and vision change additionally set their existing reported boolean fields; they do not refresh lab/ultrasound measurements. Chest pain and breathing difficulty trigger the urgent response without model generation, while the authorized self-report is still saved first.
+
+The ingestion API also accepts `symptoms:["dizziness","nausea"]` with optional `values` (which may be empty). Unknown/duplicate IDs, non-array lists, more than 16 categories, and conflicting `headache:false`/`visionChange:false` fields are rejected. Existing observation tables are migrated additively with `symptoms_json` defaulting to `[]`; old readings and reports remain intact. The live history, chat receipts, Crew Data recent records and CSV expose these reports separately from numeric readings.
 
 Negation, hypothetical questions, quotations, mixed/complex statements and third-person reports do not match. A clinician merely selecting another astronaut is not sufficient to attribute a first-person report to that astronaut. The selected person must equal the authenticated account. Voice reports require the existing reviewed-transcript confirmation before any write. Urgent rules remain in force; extraction is not clinical triage.
 
 Saving occurs after request validation/authorization/rate checks and **before rebuilding that request's assessment/context**. `/api/chat` returns `persisted:true` only for a saved structured observation, plus `healthRecord:{status,reason,observation}`. Otherwise `persisted:false` and a not-saved explanation are shown. The complete chat text/history is not persisted. If a network request fails, the client cannot know whether the write completed: inspect incoming observations before resending.
 
-Explicit record reviews and newly saved self-reports can include authorized context; other ordinary chat does not. Context includes up to **eight non-superseded field updates within seven mission days**, never future days, other people, other missions, images or arbitrary transcript text. Base `origin` remains `database_checkin`/`simulated_feed`; saved partial updates are identified separately. Model summaries remain server-grounded, bounded, experimental and non-diagnostic.
+Explicit record reviews and newly saved self-reports can include authorized context; other ordinary chat does not. Context includes up to **eight health updates within seven mission days**, prioritizing symptom reports over a high-frequency vital stream. Never future days, other people, other missions, images or arbitrary transcript text. A newer full check-in supersedes older numeric/boolean overlays, but saved symptoms remain historical reports with their original timestamps, not newly measured current conditions. Base `origin` remains `database_checkin`/`simulated_feed`; saved partial updates are identified separately. Model summaries remain server-grounded, bounded, experimental and non-diagnostic. Chest/breathing reports receive immediate urgent handling, not an inferred permanent diagnosis or automatic symptom resolution.

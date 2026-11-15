@@ -6,7 +6,7 @@ export function mountLiveMonitor(host,api,context) {
   const root=document.createElement('div');host.append(root);
   root.innerHTML=`<p class="crew-notice">Live ingestion demonstration · No physical sensor is connected. Demo values are generated in this browser and saved through the same authenticated API as manual entries. Only supplied fields change; older labs and images are preserved. Observations apply to the selected mission and day.</p>
     <div class="backend-toolbar"><button class="btn primary" id="live-start">Start demo stream</button><button class="btn" id="live-stop" disabled>Stop stream</button><span id="live-status" role="status">Stream stopped · Monitoring API every 2 seconds</span></div>
-    <p id="live-error" role="alert"></p><p id="live-save" role="status"></p>
+    <p id="live-error" role="alert"></p><p id="live-save" role="status"></p><p id="live-routing" role="status"></p>
     <h2>Send a live measurement</h2><form id="live-entry"><div class="backend-checkin">
     ${[['restingHrBpm','Resting heart rate (bpm)',20,220,1],['spo2Pct','SpO₂ (%)',50,100,1],['bodyTempC','Temperature (°C)',30,43,.1],['systolicBp','Systolic pressure (mmHg)',50,260,1],['diastolicBp','Diastolic pressure (mmHg)',30,160,1]].map(([key,label,min,max,step])=>`<label>${label}<input class="field" name="${key}" type="number" min="${min}" max="${max}" step="${step}"></label>`).join('')}
     <label>Reported headache<select class="field" name="headache"><option value="">Unchanged</option><option value="true">Yes</option><option value="false">No</option></select></label></div><button class="btn primary">Save supplied fields</button></form>
@@ -20,7 +20,7 @@ export function mountLiveMonitor(host,api,context) {
       const [data,assessment]=await Promise.all([api('/api/observations?'+query),api(`/api/assessment?day=${day}&mission=${mission}&mode=space`)]);
       if(disposed)return;
       $('#live-summary').textContent=`${data.total} saved samples · Server checked ${data.serverTime} · Showing latest 50`;
-      $('#live-events').innerHTML=data.observations.map(o=>`<article class="backend-message"><strong>#${o.id} · ${esc(o.source)}</strong><p>Measured: ${esc(o.measuredAt)} · Received: ${esc(o.receivedAt)}</p><p>${esc(JSON.stringify(o.values))}</p></article>`).join('')||'<p>No live samples yet. Start the demo or send a measurement.</p>';
+      $('#live-events').innerHTML=data.observations.map(o=>`<article class="backend-message"><strong>#${o.id} · ${esc(o.source)}</strong><p>Measured: ${esc(o.measuredAt)} · Received: ${esc(o.receivedAt)}</p><p>${esc(JSON.stringify(o.values))}</p>${o.symptoms?.length?`<p>Self-reported symptoms (not diagnoses): ${esc(o.symptoms.map(id=>id.replaceAll('_',' ')).join(', '))}</p>`:''}</article>`).join('')||'<p>No live samples yet. Start the demo or send a measurement.</p>';
       const subject=assessment.subjects.find(s=>s.id===crewId);
       $('#live-values').innerHTML=(subject?.space||[]).filter(f=>['vitals','basics','headache'].includes(f.id)).map(f=>`<article class="card card-padding"><strong>${esc(f.title)} · ${esc(f.level.toUpperCase())}</strong><p>${esc(f.measured)}</p><small>${esc(subject.info[f.id]?.source)}</small></article>`).join('');
     } catch(e){error(e);}finally{reading=false;}
@@ -31,6 +31,9 @@ export function mountLiveMonitor(host,api,context) {
       const result=await api('/api/observations',{method:'POST',body:JSON.stringify({crewId,day,mission,source,values})});
       if(disposed)return;
       $('#live-save').textContent=`Saved #${result.observation.id} to ${crewId} · Day ${day} · ${result.observation.receivedAt}`;
+      const review=result.lightReview;
+      const target=`${review?.status==='urgent'?'health-check.html':'light-therapy.html'}?crewId=${encodeURIComponent(crewId)}&day=${day}&mission=${mission}`;
+      $('#live-routing').innerHTML=review&&['review','caution','urgent'].includes(review.status)?`${esc(review.action)} <a href="${esc(target)}">${review.status==='urgent'?'Open Health Check':'Review light / sleep plan'}</a>`:'';
       $('#live-error').textContent='';await update();
     }catch(e){error(e);if(source==='demo_stream')stop();}finally{sending=false;}
   }

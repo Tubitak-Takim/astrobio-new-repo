@@ -18,6 +18,7 @@ jobs:
       - run: node --check frontend/js/chat-language.js
       - run: node --check frontend/js/crew-data.js
       - run: node --check frontend/js/live-monitor.js
+      - run: node --check frontend/js/light-plan.js
       - run: node --check frontend/js/app.js
       - run: node --check frontend/js/data.js
       - run: node --check frontend/js/anatomy.js

@@ -13,6 +13,7 @@ import type { CrewDatasetResponse } from '../src/crewDataset'
 import type { Observation } from '../src/model'
 import { createServer, type Server } from 'node:http'
 import { readJson, readBinary } from './http'
+import type { LightPlanResponse } from './lightPlan'
 
 // Only the JSON fields inspected by this integration suite. Node's fetch JSON
 // result is unknown, unlike the old DOM types; assertions below verify behavior.
@@ -37,6 +38,12 @@ type TestPayload = Pick<Assessment, 'subjects' | 'mission' | 'report'> & {
   observations:Observation[]
   total:number
   healthRecord:{status:string;reason:string;observation:Observation|null}
+  plan:LightPlanResponse
+  preferences:LightPlanResponse['preferences']
+  review:LightPlanResponse['review']
+  schedule:LightPlanResponse['schedule']
+  deviceConnected:boolean
+  exposureAuthorized:boolean
 }
 
 let processHandle: ChildProcess | undefined
@@ -120,6 +127,8 @@ beforeAll(async () => {
 
 describe('same-origin frontend', () => {
   it('serves every frontend page and its local integration assets without signing in', async () => {
+    expect((await fetch(base+'/light-therapy.html')).status).toBe(200)
+    expect((await fetch(base+'/js/light-plan.js')).status).toBe(200)
     expect((await fetch(base+'/js/live-monitor.js')).status).toBe(200)
     const pages = ['/', '/index.html', '/live-monitoring.html', '/crew-data.html', '/ask-to-ai.html', '/bis-analizi.html', '/gorev-sagligi.html', '/gunluk-etkiler.html', '/gunluk-yuk.html', '/health-check.html', '/olcumler.html', '/personel-info.html', '/raporlar.html', '/ridge.html', '/takvim.html', '/toparlanma.html', '/uyku.html']
     for (const path of pages) {
@@ -152,6 +161,30 @@ describe('same-origin frontend', () => {
 })
 
 describe('live ingestion and structured chat reports over HTTP',()=>{
+  it('saves multiple symptoms to the authenticated astronaut and includes them in later context',async()=>{
+    const start=modelPrompts.length
+    const result=await request('C4','POST','/api/chat',{crewId:'C4',day:8,mission:'mars',language:'en',message:'Başım dönüyor ve midem bulanıyor'})
+    expect(result.status).toBe(200)
+    expect(result.data.healthRecord.observation).toMatchObject({crewId:'C4',day:8,symptoms:['dizziness','nausea'],values:{}})
+    expect(JSON.stringify(modelPrompts.slice(start))).toContain('dizziness')
+    expect(result.data.reply).toContain('reported symptoms: dizziness, nausea')
+    const read=await request('C2','GET','/api/observations?crewId=C4&day=8&mission=mars')
+    expect(read.data.observations[0].symptoms).toEqual(['dizziness','nausea'])
+    const later=await request('C4','POST','/api/chat',{crewId:'C4',day:9,mission:'mars',language:'en',message:'Review my health records'})
+    expect(later.status).toBe(200)
+    expect(later.data.reply).toContain('reported symptoms: dizziness, nausea')
+    const negative=await request('C2','POST','/api/chat',{crewId:'C2',day:8,mission:'mars',language:'en',message:'I do not feel nauseous'})
+    expect(negative.data.persisted).toBe(false)
+  })
+  it('saves acute symptom reports while retaining urgent model bypass',async()=>{
+    const start=modelPrompts.length
+    const result=await request('C4','POST','/api/chat',{crewId:'C4',day:10,mission:'mars',language:'tr',message:'Göğsüm ağrıyor ve nefesim daralıyor'})
+    expect(result.status).toBe(200)
+    expect(result.data.route).toBe('urgent')
+    expect(result.data.healthRecord.observation!.symptoms).toEqual(['chest_pain','shortness_of_breath'])
+    expect(database!.prepare("SELECT status FROM light_review_alerts WHERE crew_id='C4' AND mission='mars' AND day=10").get()!.status).toBe('urgent')
+    expect(modelPrompts).toHaveLength(start)
+  })
   it('preserves full manual records/images and lets a later complete check-in supersede older updates',async()=>{
     const reading={...readingOn(CREW[3],6),attachment:{dataUrl:'data:image/jpeg;base64,UFJJVkFURQ==',width:1,height:1,bytes:7,attachedAt:'2026-11-15T00:00:00Z',caption:'PRIVATE_LIVE_IMAGE'}}
     expect((await request('C4','PUT','/api/checkins/C4/6',reading)).status).toBe(200)
@@ -197,7 +230,7 @@ describe('live ingestion and structured chat reports over HTTP',()=>{
     const later=await request('C4','POST','/api/chat',{crewId:'C4',day:3,mission:'mars',language:'en',message:'Review my health records'})
     expect(later.status).toBe(200)
     expect(later.data.reply).toContain('Day 2: headache reported')
-    const db=database!.prepare("SELECT values_json FROM health_observations WHERE source='chat_self_report' AND crew_id='C4'").all()
+    const db=database!.prepare("SELECT values_json FROM health_observations WHERE source='chat_self_report' AND crew_id='C4' AND day=2").all()
     expect(db).toHaveLength(1)
   })
   it('does not attribute a CMO self-report to a selected colleague or save unconfirmed speech',async()=>{
@@ -218,6 +251,46 @@ describe('live ingestion and structured chat reports over HTTP',()=>{
     expect(result.data.persisted).toBe(true)
     const rows=await request('C4','GET','/api/observations?crewId=C4&day=4&mission=mars')
     expect(rows.data.observations.some(o=>o.source==='chat_self_report' && o.values.headache)).toBe(true)
+  })
+})
+
+describe('light and circadian planning HTTP workflow',()=>{
+  it('serves authorized calendars and rejects unsupported treatment/device controls',async()=>{
+    expect((await request(null,'GET','/api/light-plan')).status).toBe(401)
+    expect((await request('FS','GET','/api/light-plan')).status).toBe(403)
+    expect((await request('C1','GET','/api/light-plan?crewId=C4')).status).toBe(403)
+    expect((await request('C2','GET','/api/light-plan?crewId=C4&day=91')).status).toBe(400)
+    const result=await request('C4','GET','/api/light-plan?crewId=C4&day=20&mission=mars')
+    expect(result.status).toBe(200)
+    expect(result.data.schedule).toHaveLength(7)
+    expect(result.data.deviceConnected).toBe(false)
+    expect(result.data.exposureAuthorized).toBe(false)
+    const c={crewId:'C4',day:20,mission:'mars'}
+    expect((await request('C4','POST','/api/light-plan/actions',{...c,kind:'red_review',action:'started'})).status).toBe(400)
+    expect((await request('C4','PUT','/api/light-plan/preferences',{...c,preferences:{wakeTime:'06:00',bedTime:'22:00',autoReview:true,dose:10}})).status).toBe(400)
+    const saved=await request('C4','PUT','/api/light-plan/preferences',{...c,preferences:{wakeTime:'08:00',bedTime:'00:00',autoReview:true}})
+    expect(saved.status).toBe(200)
+    expect(saved.data.plan.preferences.wakeTime).toBe('08:00')
+    expect((await request('C2','GET','/api/light-plan?crewId=C4&day=20&mission=mars')).data.preferences.wakeTime).toBe('08:00')
+  })
+  it('generates persistent review prompts from stress and incoming health updates without a page open',async()=>{
+    const c={crewId:'C4',day:20,mission:'mars'}
+    expect((await request('C2','POST','/api/light-plan/stress',{...c,score:8})).status).toBe(403)
+    expect((await request('C4','POST','/api/light-plan/stress',{...c,score:'8'})).status).toBe(400)
+    const result=await request('C4','POST','/api/light-plan/stress',{...c,score:8})
+    expect(result.status).toBe(200)
+    expect(result.data.plan.review.status).toBe('review')
+    expect(database!.prepare("SELECT status FROM light_review_alerts WHERE crew_id='C4' AND mission='mars' AND day=20").get()!.status).toBe('review')
+    expect((await request('C4','GET','/api/light-plan?crewId=C4&day=20&mission=iss')).data.review.metrics.selfReportedStress).toBeNull()
+    const count=database!.prepare("SELECT count(*) AS n FROM light_plan_events WHERE crew_id='C4' AND mission='mars' AND day=20 AND kind='automatic_review'").get()!.n
+    await request('C4','GET','/api/light-plan?crewId=C4&day=20&mission=mars')
+    expect(database!.prepare("SELECT count(*) AS n FROM light_plan_events WHERE crew_id='C4' AND mission='mars' AND day=20 AND kind='automatic_review'").get()!.n).toBe(count)
+    const incoming=await request('C4','POST','/api/observations',{crewId:'C4',day:21,mission:'mars',source:'manual_entry',symptoms:['fatigue']})
+    expect(incoming.status).toBe(201)
+    expect(database!.prepare("SELECT status FROM light_review_alerts WHERE crew_id='C4' AND mission='mars' AND day=21").get()!.status).toBe('review')
+    const red=await request('C4','POST','/api/light-plan/actions',{...c,kind:'red_review',action:'requested'})
+    expect(red.status).toBe(200)
+    expect(red.data.plan.exposureAuthorized).toBe(false)
   })
 })
 

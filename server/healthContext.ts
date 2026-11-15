@@ -34,6 +34,12 @@ export function healthContextFor(user: User, subjectId: string, day: number, mis
   const sourceIds = [...new Set(subject.space.flatMap(f => f.sourceIds))]
   const levels = { red: 0, amber: 1, green: 2 }
   const detailed = new Set([...subject.space].sort((a,b) => levels[a.level]-levels[b.level] || Number(subject.info[b.id]?.stale)-Number(subject.info[a.id]?.stale)).slice(0,3).map(f=>f.id))
+  const recent=(checkIns[OBSERVATIONS] ?? []).filter(o=>o.crewId===subjectId && o.mission===mission && o.day<=day && o.day>=day-6)
+  // A fast demo/sensor stream must not immediately crowd a symptom report out.
+  const reports=recent.filter(o=>o.symptoms?.length || o.values.headache!==undefined).slice(-8)
+  const reportIds=new Set(reports.map(o=>o.id))
+  const other=recent.filter(o=>!reportIds.has(o.id) && !o.symptoms?.length && o.values.headache===undefined)
+  const recentObservations=[...reports,...(reports.length<8?other.slice(-(8-reports.length)):[])].sort((a,b)=>a.measuredAt.localeCompare(b.measuredAt)||a.id-b.id)
   const context = {
     subjectId, day, mission, prototype: true,
     origin: saved ? 'database_checkin' as const : 'simulated_feed' as const,
@@ -43,10 +49,10 @@ export function healthContextFor(user: User, subjectId: string, day: number, mis
     findings: subject.space.map(({ id, level, measured, why, next, sourceIds }) => ({ id, level, measured, why: detailed.has(id) ? why : undefined, next: detailed.has(id) ? next : undefined, sourceIds })),
     sources: sourceIds.map(id => ({ id, status: SOURCES[id].status })),
     previousSavedReadings: history,
-    recentObservations:(checkIns[OBSERVATIONS] ?? []).filter(o=>o.crewId===subjectId && o.mission===mission && o.day<=day && o.day>=day-6).slice(-8),
+    recentObservations,
     datasetVersion: SYNTHETIC_VERSION,
     associations: crew ? {fromDay:Math.max(1,day-29),toDay:day,results:dataRelationships(generatedSeries(crew,day,mission,checkIns)).map(({id,r,n,manualPoints})=>({id,r,n,manualPoints})),caution:'Exploratory correlations in a synthetic/mixed series, not causal effects or clinical predictions. Coefficients and coupling drivers are not NASA findings.'} : null,
-    limits: 'Simulation prototype, not clinically validated. origin describes the base reading only; recentObservations are separate saved field updates. Observations apply only to their exact mission/person/day, ordered by measurement timestamp. Chat self-reports are reports, not diagnoses. Older saved readings are historical and are not carried forward. History includes at most seven prior saved check-in summaries; recentObservations includes at most eight updates within seven mission days. No images, arbitrary notes or transcript history. Provenance age/stale flags refer to the selected day, not the calendar date. Unrelated lab freshness is unchanged by partial updates.',
+    limits: 'Simulation prototype, not clinically validated. origin describes the base reading only; recentObservations are separate health updates. Symptoms are self-reports, not diagnoses or measured vitals. Feverishness does not establish a temperature; palpitations do not establish a heart rate. Full check-ins supersede older field overlays, not historical symptom reports. Older reports are not automatically current symptoms. History includes at most seven prior saved check-in summaries; recentObservations includes at most eight updates within seven mission days, prioritizing symptom reports over vital streams. No other people/missions/future days, images, arbitrary notes or transcript history. Provenance age/stale flags refer to the selected day, not the calendar date. Unrelated lab freshness is unchanged by partial updates.',
   }
   // Context is server bounded before generation; do not silently truncate a
   // finding or discard its stale flag to make it fit the model context window.

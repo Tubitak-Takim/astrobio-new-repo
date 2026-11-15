@@ -232,6 +232,8 @@
     if(['cole-r0','cole-alpha'].includes(event.target.id)) {const r=Number($('#cole-r0').value),a=Number($('#cole-alpha').value);$('#cole-r0-val').textContent=r;$('#cole-alpha-val').textContent=fmt(a,2);$('#cole-plot').innerHTML=colePlot(r,a);}
   }
   function init() {
+    routes['light-therapy.html']='lighting';
+    pages.lighting=()=>connectedPage('Light & Circadian Care','CIRCADIAN PLANNING · RESEARCH REVIEW');
     routes['live-monitoring.html']='live';
     pages.live=()=>connectedPage('Live Monitoring','LIVE INGESTION DEMONSTRATION');
     window.ASTROBIO_DESIGN={setMission(value){if(!Object.hasOwn(D.missionModes,value))return;S.mode=value;localStorage.setItem('astrobio-mode',value);render();}};

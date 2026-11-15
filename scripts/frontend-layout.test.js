@@ -10,7 +10,7 @@ it('renders the provided non-WebGL layouts with their original navigation and ch
   new Function(readFileSync('frontend/js/data.js','utf8'))();
   new Function(readFileSync('frontend/js/app.js','utf8'))();
   document.dispatchEvent(new Event('DOMContentLoaded'));
-  const routes=['overview','crew-data','live','ai','personal','measurements','bis','ridge','reports','calendar','sleep','recovery','load','mission-health','insights'];
+  const routes=['overview','crew-data','live','lighting','ai','personal','measurements','bis','ridge','reports','calendar','sleep','recovery','load','mission-health','insights'];
   for(const route of routes) {
     window.location.hash=route;
     window.dispatchEvent(new Event('hashchange'));

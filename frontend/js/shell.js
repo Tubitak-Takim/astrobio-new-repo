@@ -15,6 +15,7 @@
         ${link('health-check','health','Interactive Health Check','arcticons:laos-health')}
         <div class="nav-divider" aria-hidden="true"></div><span class="nav-group-label">DAILY INDICATORS</span>
         ${link('uyku','sleep','Sleep Analysis','mdi:weather-night')}
+        ${link('light-therapy','lighting','Light & Circadian Care','mdi:lightbulb-on-outline')}
         ${link('toparlanma','recovery','Recovery','mdi:heart-pulse')}
         ${link('gunluk-yuk','load','Daily Load','mdi:lightning-bolt-outline')}
         ${link('gorev-sagligi','mission-health','Mission Health','mdi:orbit')}

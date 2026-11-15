@@ -6,6 +6,8 @@ Base URL geliştirmede `/api` proxy'si veya `http://127.0.0.1:8787/api`. JSON ku
 
 `/crew-data` yanıtı `version`, `mission`, `day`, `fromDay`, `simulated:true`, rol filtreli `crew` ve `limitations` alanlarını içerir. Her kişi için kurmaca profil, kaynak durumları, `series[{day,origin,reading,cabin,measurementDays}]` ve hesaplanan `relationships[{id,label,r,n,manualPoints,sourceIds,note}]` döner. `origin` sentetik snapshot veya o güne ait manuel kayıt olarak ayrılır; görüntü/notlar aktarılmaz. `r:null` yetersiz/değişmeyen seri demektir; nedensellik veya klinik risk değildir. [Üretim ve kaynak ayrıntıları](SYNTHETIC_CREW_DATA.md).
 
+`/observations` artık `symptoms:["dizziness","nausea"]` gibi doğrulanmış 16 belirti kategorisini de kabul eder; `values` boş veya eksik olabilir. Bunlar kişinin bildirdiği belirtilerdir, tanı veya üretilmiş ölçüm değildir. Yanıttaki `observation.symptoms` kaydedilen kategorileri belirtir. [Desteklenen Türkçe/İngilizce ifadeler ve çoklu belirti kuralları](LIVE_MONITORING.md#conservative-chat-writes-and-context).
+
 ## Uç noktalar
 
 | Metot | Yol | Yetki / açıklama |
@@ -15,6 +17,10 @@ Base URL geliştirmede `/api` proxy'si veya `http://127.0.0.1:8787/api`. JSON ku
 | POST | `/login` | `{userId,pin}` → `{token,user}`; oturum 12 saat |
 | POST | `/logout` | Mevcut oturumu siler |
 | GET | `/state` | Kullanıcının görebileceği kayıtlar |
+| GET | `/light-plan?crewId=C1&day=2&mission=mars` | Kişisel ışık/uyku takvimi, kaynak etiketleri, otomatik inceleme ve geçmiş; Dünya 403 |
+| PUT | `/light-plan/preferences` | `{crewId,day,mission,preferences:{wakeTime,bedTime,autoReview}}`; doz/cihaz ayarı kabul etmez |
+| POST | `/light-plan/stress` | `{crewId,day,mission,score}`; 0–10 tam sayı, yalnız oturum sahibinin öz-bildirimi |
+| POST | `/light-plan/actions` | Hatırlatma onayı veya kırmızı ışık araştırma incelemesi talebi; tedavi başlatma/onaylama yok |
 | POST | `/observations` | Yetkili kişi/gün/görev için kısmi canlı ölçüm; source/ölçüm/alım zamanı ile kalıcı kayıt, HTTP 201 |
 | GET | `/observations?crewId=C1&day=60&mission=mars` | Yetkili bağlamdaki son 50 örnek, toplam sayı ve sunucu zamanı; Dünya 403 |
 | GET | `/crew-data?day=90&mission=mars&window=90` | Sentetik astronot serileri, ölçüm günleri ve hesaplanan ilişkiler; mürettebat kendisi, CMO dört kişi, Dünya 403 |
@@ -38,6 +44,8 @@ Base URL geliştirmede `/api` proxy'si veya `http://127.0.0.1:8787/api`. JSON ku
 `day`: 1–90 tam sayı. Assessment için `mission`: `iss`, `moon`, `mars`; `mode`: `earth`, `space`. Varsayılanlar: 60, `mars`, `space`. Mesaj/acil durum kayıtlarında eksik veya tanınmayan mission mevcut uyumluluk nedeniyle `mars` gecikmesini kullanır.
 
 ## Yeni frontend için değerlendirme
+
+Işık planlama uç noktaları `{persisted:true,receipt,plan}` yazma yanıtı verir; `plan.deviceConnected:false` ve `plan.exposureAuthorized:false` her zaman açıktır. Yeni sağlık verileri seçili bağlamın inceleme kurallarını tetikleyebilir; `/observations` ve `/chat` ek `lightReview` meta verisi döndürebilir. Bunlar doğrulanmış stres tanısı veya tedavi talimatı değildir. [Kural eşikleri, yetki, saat ve kalıcılık sözleşmesi](LIGHT_PLAN.md).
 
 ```js
 const response = await fetch('/api/assessment?day=60&mission=mars&mode=space', {
@@ -114,7 +122,7 @@ Yanıt: `{route,reply,specialist,companion,original?,experimental:true,replyId,r
 
 **Veritabanı özeti istendiğinde:** “Genel sağlık verilerimi analiz et”, “Analyze my health records” gibi istekler seçili yetkili kişi/gün için sunucu üretimli bağlam alır. Önceki paragraftaki kayıtsız genel eğitim akışından farklı olarak yalnız bu istekte ölçümler, baz çizgi, kural sonuçları, kaynak/güncellik ve en fazla yedi önceki kaydın sınırlı özeti aktarılır. İstemcinin gönderdiği `healthContext` dikkate alınmaz. Başka kişiler, isimler, notlar, mesajlar ve görseller aktarılmaz. `healthContext:{subjectId,day,mission,origin,previousSavedReadings,staleFindingIds}` yanıt meta verisi kaynağı açıklar; origin `database_checkin` veya `simulated_feed` olabilir. Bu, SQL erişimi veren bir model aracı değildir.
 
-Yeni kaydedilen desteklenen öz-bildirim de aynı sınırlı bağlamı tetikleyebilir. Kayıt bağlamı son yedi görev gününden en fazla sekiz, daha yeni bir tam check-in tarafından geçersiz kılınmamış alan güncellemesini içerir; başka görevler/gelecek günler eklenmez. `origin` temel kaydı belirtir; canlı güncellemeler `recentObservations` içinde ayrı kaynak ve zaman taşır. `/ai/pipeline/status` geçmiş için `memory:"stateless"`, yapılandırılmış sağlık kayıtları için ek `healthMemory:"structured_observations"` alanını verir.
+Yeni kaydedilen desteklenen öz-bildirim de aynı sınırlı bağlamı tetikleyebilir. Kayıt bağlamı son yedi görev gününden en fazla sekiz sağlık güncellemesi içerir; belirti bildirimleri hızlı ölçüm akışına göre öncelik alır. Yeni tam check-in eski ölçüm alanlarını geçersiz kılar, fakat belirtiler kendi zamanlarıyla tarihsel öz-bildirim olarak kalır. Başka görevler/gelecek günler eklenmez. `origin` temel kaydı belirtir; güncellemeler `recentObservations` içinde ayrı kaynak ve zaman taşır. `/ai/pipeline/status` geçmiş için `memory:"stateless"`, yapılandırılmış sağlık kayıtları için ek `healthMemory:"structured_observations"` alanını verir.
 
 Bu kayıt akışında Qwen yalnız `opening` ve mevcut bulgu ID'lerinden oluşan `findingIds` seçebilir; serbest tıbbi yorum/metin, ek alan veya uydurma bulgu kabul edilmez. Sayılar, kural seviyeleri, ölçüm yaşları ve kaynak etiketleri sunucuda üretilir; işaretli/eski bulgular gizlenemez. MedGemma çıktısı tamamlanmamış veya kayıtlarda bulunmayan sayılar içeriyorsa Qwen'e verilmez. MedGemma başarısız olsa da Qwen yetkili kural/veri paketinden seçim yapabilir. Seçim de başarısızsa model cevabı olmadığı açıkça belirtilen kanonik kayıt/kural özeti döner. Genel sohbet ve yalnız eğitim sorularında kayıt aktarımı yapılmaz. Sayısal kontrol ve kural motoru klinik doğruluk garantisi değildir.
 
