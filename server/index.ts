@@ -438,7 +438,9 @@ const server = createServer(async (req, res) => {
 })
 
 server.requestTimeout = 15_000
-server.listen(PORT, '127.0.0.1', () => {
+const HOST = process.env.HOST ?? '127.0.0.1'
+server.listen(PORT, HOST, () => {
   const address = server.address()
-  console.log(`Astrobio API on http://127.0.0.1:${typeof address === 'object' && address ? address.port : PORT}`)
+  console.log(`Astrobio API on http://${HOST}:${typeof address === 'object' && address ? address.port : PORT}`)
+})
 })
