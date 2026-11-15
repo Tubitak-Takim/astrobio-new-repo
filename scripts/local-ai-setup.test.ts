@@ -22,6 +22,19 @@ afterEach(async () => {
 })
 
 describe('setup configuration', () => {
+  it('defaults the selected companion role to Qwen3 without replacing custom models', () => {
+    expect(configuration('', undefined, {}, 'companion').config.model).toBe('qwen3:1.7b')
+    expect(configuration('COMPANION_AI_MODEL=custom-chat', undefined, {}, 'companion').config.model).toBe('custom-chat')
+    const source = 'LOCAL_AI_ENABLED=true\nLOCAL_AI_MODEL=medgemma1.5:4b\n'
+    const result = configuration(source, 'chosen-companion', {}, 'companion')
+    const values = parseEnv(result.envText)
+    expect(values.LOCAL_AI_MODEL).toBe('medgemma1.5:4b')
+    expect(values.COMPANION_AI_MODEL).toBe('chosen-companion')
+    expect(values.COMPANION_AI_ENABLED).toBe('true')
+    const defaults = parseEnv(configuration(source, undefined, {}, 'companion').envText)
+    expect(defaults.LOCAL_AI_MODEL).toBe('medgemma1.5:4b')
+    expect(defaults.COMPANION_AI_MODEL).toBe('qwen3:1.7b')
+  })
   it('selects the agreed model only when no model is configured', () => {
     expect(configuration('').config.model).toBe('medgemma1.5:4b')
     expect(configuration('LOCAL_AI_MODEL=custom:4b').config.model).toBe('custom:4b')
@@ -129,6 +142,17 @@ describe('download and production smoke test', () => {
 })
 
 describe('safe configuration persistence', () => {
+  it('writes a separate companion lock without touching the medical model lock', async () => {
+    const root = await temp()
+    const medicalEnv = configuration('').envText
+    await saveSetup(root, null, medicalEnv, null, lock)
+    const medicalLock = await readFile(join(root, 'local-ai/model-lock.json'), 'utf8')
+    const companion = { ...lock, model: 'selected-companion' }
+    const companionEnv = configuration(medicalEnv, companion.model, {}, 'companion').envText
+    await saveSetup(root, medicalEnv, companionEnv, null, companion, 'companion')
+    expect(await readFile(join(root, 'local-ai/model-lock.json'), 'utf8')).toBe(medicalLock)
+    expect(parseLock(await readFile(join(root, 'local-ai/companion-model-lock.json'), 'utf8'))).toEqual(companion)
+  })
   it('creates initial settings and a reviewable model lock', async () => {
     const root = await temp()
     const env = configuration('').envText

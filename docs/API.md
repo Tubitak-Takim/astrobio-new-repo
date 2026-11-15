@@ -24,6 +24,11 @@ Base URL geliştirmede `/api` proxy'si veya `http://127.0.0.1:8787/api`. JSON ku
 | POST | `/reword` | Yerel Node API'de oturum gerekir; `{question,text}` |
 | GET | `/ai/status` | Oturum gerekir; yerel Ollama/model envanter durumu |
 | POST | `/ai/explain` | Oturum + bulgu yetkisi; `{crewId,findingId,day,mission?,language?}`; Dünya 403 |
+| GET | `/ai/pipeline/status` | İki model + ses yapılandırma durumu; oturum gerekir |
+| POST | `/chat` | Mürettebat/CMO; metin + isteğe bağlı yetkili bulgu; kalıcı geçmiş yok |
+| GET | `/voice/status` | Ses yapılandırması; gerçek motor doğrulaması iddiası yok |
+| POST | `/voice/transcribe?language=tr` | Açık ses onayı; ham mono PCM16/16 kHz WAV, 30 saniye sınırı |
+| POST | `/voice/speak` | Açık ses onayı; yalnız aynı kullanıcıya ait kısa ömürlü `{replyId}` |
 
 `day`: 1–90 tam sayı. Assessment için `mission`: `iss`, `moon`, `mars`; `mode`: `earth`, `space`. Varsayılanlar: 60, `mars`, `space`. Mesaj/acil durum kayıtlarında eksik veya tanınmayan mission mevcut uyumluluk nedeniyle `mars` gecikmesini kullanır.
 
@@ -62,7 +67,7 @@ Kesin tipler: `src/assessment.ts`, `src/model.ts` (`Subject`, `Provenance`), `sr
 
 `{user,now,messages,checkIns,events,notes,tasksDone,emergencies}`. `now` sunucunun epoch milisaniyesidir. `checkIns` anahtarı `C1:60` biçimindedir. Dünya kullanıcısına check-in/not/acil durum tabloları verilmez; yalnız gecikmesi dolmuş iletiler ve kendi gönderdiği iletiler döner.
 
-Yazma uç noktaları genellikle güncel state'i döner. Giriş ve çıkış bunun istisnasıdır. Eski frontend API adaptörü kaldırıldı; yeni arayüz kendi HTTP adaptörünü geliştirmelidir.
+Yazma uç noktaları genellikle güncel state'i döner. Giriş ve çıkış bunun istisnasıdır. Güncel aynı-origin frontend adaptörü `frontend/js/backend.js` içindedir.
 
 ## Mesaj gizliliği ve boyutlar
 
@@ -93,3 +98,11 @@ Varsayılan JSON gövde sınırı 20.000 bayttır; check-in/görsel ve uzun rapo
 Yanıt: `{state,original:{finding,provenance,sources},generated:string|null,experimental:true,disclaimer,model?}`. Kırmızı/eski bulgu veya model/bağlantı sorunu için HTTP 200 ve `generated:null` dönebilir; istemci `state` alanını kontrol etmelidir. Bu durumda orijinal bulgu kullanılmalıdır. Yetkisiz çağrılar 401/403, geçersiz giriş 400, bulunamayan bulgu 404, hız sınırı 429 döner. Otomatik bulut fallback yoktur.
 
 `/ai/status` oturumlu kullanıcıya yapılandırılmış servis ve model aliasının durumunu bildirir; `ready` inference veya klinik doğrulama anlamına gelmez. Kurulum, tüm durum değerleri, model seçimi ve sınırlar: [LOCAL_AI.md](LOCAL_AI.md).
+
+## İki-model sohbet ve ses
+
+`/chat` alanları: `{message,language?,crewId?,findingId?,day?,mission?,inputOrigin?,transcriptConfirmed?}`. Mesaj 1–2000 karakter; API varsayılanları `tr`, oturum sahibi, 60, `mars`; İngilizce frontend `language:"en"` gönderir. `inputOrigin:"voice"` için `transcriptConfirmed:true` zorunlu. `findingId` gerekli değildir: genel mesajlar doğrudan Qwen3'e, sağlıkla ilgili serbest sorular MedGemma'ya gönderilir. Kelime eşlemesi yalnız rol seçer; artık `needs_context` ret yolu yoktur. Yetki kontrolü sunucudadır; acil işaretler/kırmızı bulgular önceliklidir.
+
+Yanıt: `{route,reply,specialist,companion,original?,experimental:true,replyId,replyExpiresInSeconds:120,persisted:false}`. `route` urgent/medical/social olabilir; social artık genel sohbeti de içerir. Seçili bulgu varsa kanonik sağlık metni korunur. Bulgu olmadan sağlık sorulursa doğrudan MedGemma'nın genel eğitim yanıtı ve açık deneysel uyarı gösterilir; Qwen3 yalnız empatik giriş seçebilir. Genel sohbette Qwen3 serbest metin üretir. `/voice/speak` son `reply` metnini okur. Model eksik/kapalı/hatalıysa bunun model yanıtı olmadığı açıkça belirtilir. Sohbet stateless'tir; önceki mesajlar veya sağlık kayıtları serbest soruya otomatik eklenmez. Yanıt doğruluğu prompt kurallarıyla garanti edilemez.
+
+Ses endpointleri `X-Voice-Consent:true` ister. STT otomatik chat başlatmaz; transkript kullanıcıya onaylatılır. `replyId` kullanıcıya özel, en fazla iki dakika RAM'de tutulur; veritabanına yazılmaz. Yanlış kullanıcı/eskimiş receipt 404; yanlış codec 415; büyük ses 413; kapalı servis 503; upstream hata 502; meşgul/hız sınırı 429. Ayrıntılı ses biçimi, Python referans servisi ve tarayıcı kullanım akışı: [DUAL_AGENT_VOICE.md](DUAL_AGENT_VOICE.md).

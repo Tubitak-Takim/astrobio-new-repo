@@ -5,23 +5,29 @@ import { parseEnv } from 'node:util'
 import { localAiConfig, type LocalAiConfig } from '../server/localAi.ts'
 
 export const DEFAULT_MODEL = 'medgemma1.5:4b'
+export const DEFAULT_COMPANION_MODEL = 'qwen3:1.7b'
+export const COMPANION_TERMS_URL = 'https://ollama.com/library/qwen3:1.7b'
 export const TERMS_URL = 'https://developers.google.com/health-ai-developer-foundations/terms'
-const ENV_KEYS = ['LOCAL_AI_ENABLED', 'LOCAL_AI_URL', 'LOCAL_AI_MODEL', 'LOCAL_AI_TIMEOUT_MS'] as const
+export type ModelRole = 'medical' | 'companion'
 
 export type ModelLock = { schemaVersion: 1; model: string; digest: string }
 type InstalledModel = { name: string; digest: string; remote_host?: unknown; remote_model?: unknown }
 
-export function configuration(text: string, model?: string, overrides: NodeJS.ProcessEnv = {}) {
+export function configuration(text: string, model?: string, overrides: NodeJS.ProcessEnv = {}, role: ModelRole = 'medical') {
   const values = parseEnv(text)
-  for (const key of ENV_KEYS) if (overrides[key] !== undefined) values[key] = overrides[key]!
+  const prefix = role === 'medical' ? 'LOCAL_AI' : 'COMPANION_AI'
+  const keys = ['ENABLED', 'URL', 'MODEL', 'TIMEOUT_MS'].map((key) => `${prefix}_${key}`)
+  for (const key of keys) if (overrides[key] !== undefined) values[key] = overrides[key]!
+  const selected = model ?? (values[`${prefix}_MODEL`] || (role === 'medical' ? DEFAULT_MODEL : DEFAULT_COMPANION_MODEL))
   const config = localAiConfig({
-    ...values,
     LOCAL_AI_ENABLED: 'true',
-    LOCAL_AI_MODEL: model ?? (values.LOCAL_AI_MODEL || DEFAULT_MODEL),
+    LOCAL_AI_URL: values[`${prefix}_URL`] || values.LOCAL_AI_URL,
+    LOCAL_AI_TIMEOUT_MS: values[`${prefix}_TIMEOUT_MS`],
+    LOCAL_AI_MODEL: selected,
   })
   return { config, envText: updateEnv(text, {
-    LOCAL_AI_ENABLED: 'true', LOCAL_AI_URL: config.baseUrl,
-    LOCAL_AI_MODEL: config.model, LOCAL_AI_TIMEOUT_MS: String(config.timeoutMs),
+    [`${prefix}_ENABLED`]: 'true', [`${prefix}_URL`]: config.baseUrl,
+    [`${prefix}_MODEL`]: config.model, [`${prefix}_TIMEOUT_MS`]: String(config.timeoutMs),
   }) }
 }
 
@@ -144,7 +150,7 @@ export async function smokeTest(config: LocalAiConfig): Promise<SmokeResult> {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, redirect: 'error',
     signal: AbortSignal.timeout(config.timeoutMs),
     body: JSON.stringify({
-      model: config.model, stream: false, keep_alive: '2m',
+      model: config.model, stream: false, keep_alive: '2m', think: false,
       messages: [{ role: 'user', content: 'This is a software connectivity test, not a medical question. Reply briefly with OK.' }],
       options: { temperature: 0, num_ctx: 4096, num_predict: 16 },
     }),
@@ -165,7 +171,7 @@ export async function optionalFile(path: string): Promise<string | null> {
   catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error }
 }
 
-async function atomicWrite(path: string, value: string) {
+export async function atomicWrite(path: string, value: string) {
   const temp = `${path}.setup-${randomUUID()}.tmp`
   try {
     await writeFile(temp, value, { mode: 0o600, flag: 'wx' })
@@ -173,9 +179,9 @@ async function atomicWrite(path: string, value: string) {
   } finally { await unlink(temp).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error }) }
 }
 
-export async function saveSetup(root: string, originalEnv: string | null, envText: string, originalLock: string | null, lock: ModelLock) {
+export async function saveSetup(root: string, originalEnv: string | null, envText: string, originalLock: string | null, lock: ModelLock, role: ModelRole = 'medical') {
   const envPath = join(root, '.env')
-  const lockPath = join(root, 'local-ai', 'model-lock.json')
+  const lockPath = join(root, 'local-ai', role === 'medical' ? 'model-lock.json' : 'companion-model-lock.json')
   for (const path of [envPath, lockPath]) {
     try { if ((await lstat(path)).isSymbolicLink()) throw new Error('Ayar dosyası sembolik bağlantı; güvenlik için otomatik değiştirilmedi.') }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }

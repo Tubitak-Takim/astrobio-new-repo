@@ -9,6 +9,7 @@ Sorumlu: **Işıkhan IŞIK**. API entegrasyonu: Muhammet Kerim Şahin. Değerlen
 - `src/data/sources.ts`: kaynakların `verified`, `partial`, `demo` etiketleri; klinik doğrulama değildir.
 - `server/reword.js`: isteğe bağlı Gemini yeniden ifade etme. Yalnız yönergeyle sınırlandırılıyor; modelin yeni bilgi üretmeyeceği matematiksel olarak garanti edilmiyor. Yeni frontend özgün metni de göstermelidir.
 - `server/localAi.ts`: yalnız yerel Ollama'ya bağlanan deneysel tek-bulgu açıklama adaptörü. Model seçilmedi/indirilmedi; varsayılan kapalı. Resmi katalogda MedGemma 7B bulunmadı; 4B/27B seçenekleri ve donanım değerlendirmesi [yerel AI araştırmasında](LOCAL_AI.md).
+- Güncel devam: kullanıcı `medgemma1.5:4b` etiketini seçip çalıştırdı; genel sohbet için **Qwen3 1.7B (`qwen3:1.7b`)** seçildi. `server/directChat.ts` ve `server/conversation.ts` bulgu seçimi gerektirmeden mesajı yerel modellere iletir. Genel sohbet Qwen3'e, sağlık eğitimi soruları MedGemma'ya gider; acil uyarılar ve eski kanonik bulgu yolu korunur. `npm run setup:companion` Qwen3'ü ayrı ayar/kilitle kurar. `tools/voice/` yerel CPU faster-whisper/Piper servisidir, ağırlık içermez. [İki-model/ses rehberi](DUAL_AGENT_VOICE.md).
 
 ## Önerilen ilk teslimatlar
 

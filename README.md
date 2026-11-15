@@ -1,10 +1,10 @@
 # Astrobio
 
-Uzay görevleri için açıklanabilir sağlık değerlendirme **backend'i**. Node.js HTTP API, SQLite, Dünya/uzay kural karşılaştırması ve simüle görev verileri içerir.
+Uzay görevleri için açıklanabilir sağlık değerlendirme uygulaması. HTML/CSS/JS arayüzü, Node.js HTTP API, SQLite, Dünya/uzay kural karşılaştırması ve simüle görev verileri içerir.
 
 > **Bu bir tıbbi cihaz değildir.** Mürettebat ve uçuş sırasındaki ölçümler simüledir; klinik doğrulama yapılmamıştır. Kaynaklı kuralların bulunması klinik güvenilirlik garantisi vermez.
 
-**Frontend bu depodan kaldırılmıştır.** Ekibimiz arayüzü sıfırdan geliştirecek. React ekranları, stiller, 3D modeller, tarayıcı demo arka ucu ve eski statik demo dağıtımı artık bu sürümün parçası değildir. Backend çalıştırıldığında web sayfası açılmaz; API kullanılır.
+**Yeni frontend entegre edilmiştir.** Sağlanan tasarım `frontend/` altında bulunur; aynı Node sunucusu arayüzü ve API'yi sunar. Giriş, yetkili değerlendirmeler, check-in, yerel AI/sesli sohbet, notlar ve gecikmeli rapor iletimi mevcut backend'e bağlıdır. Halka skorları/BIS gibi bağımsız sentetik tasarım demoları ayrıca etiketlenmiştir. [Frontend rehberi](frontend/README_PROJE.md).
 
 ## Ekip
 
@@ -31,9 +31,10 @@ npm ci
 npm run dev
 ```
 
-Geliştirme komutu yalnız API'yi başlatır ve dosya değişikliklerinde yeniden yükler. İzleme olmadan çalıştırmak için `npm start` veya `npm run server` kullanın.
+Geliştirme komutu arayüzü ve API'yi aynı sunucuda başlatır; sunucu dosyası değişikliklerinde yeniden yükler. Frontend değişiklikleri için tarayıcıyı yenileyin. İzleme olmadan `npm start` veya `npm run server` kullanın.
 
 - API: **http://127.0.0.1:8787/api**
+- Arayüz: **http://127.0.0.1:8787/**
 - Sağlık kontrolü: **http://127.0.0.1:8787/api/health**
 - Varsayılan SQLite dosyası: `data/crew-health.sqlite`
 - Demo PIN: **`2026`**; kullanıcı kimlikleri: `C1`, `C2` (CMO), `C3`, `C4`, `FS` (Dünya).
@@ -50,9 +51,13 @@ npm run setup:local-ai
 npm run dev
 ```
 
-Kurulum komutu onayınızla `medgemma1.5:4b` modelini indirir veya mevcut modeli kullanır; kısa bir üretim testi yapar, CPU/GPU durumunu bildirir ve `.env` içindeki yerel AI alanlarını etkinleştirir. Başka bir model zaten yapılandırılmışsa korunur. Diğer ayarlar değişmez; değiştirilen mevcut `.env` yedeklenir. Model ağırlıkları Git'e eklenmez.
+Kurulum komutu onayınızla önce `medgemma1.5:4b`, sonra sohbet için **Qwen3 1.7B (`qwen3:1.7b`)** modelini indirir veya mevcut yapılandırılmış modelleri kullanır; üretim testi yapar, CPU/GPU durumunu bildirir ve ilgili `.env` alanlarını etkinleştirir. **Ses kurulumu da varsayılan dahildir:** ayrı Python ortamı, faster-whisper/Piper paketleri, STT/TTS ağırlıkları ve sentetik ses testi hazırlanır. Python 3.11/3.12 yoksa mevcut `uv` ile Python indirilebilir; ikisi de yoksa talimatla durur. Sistem Python’una pip kurulumu veya yönetici komutu çalıştırılmaz.
+
+Varsayılan Türkçe ses kartındaki CC BY-NC-SA veri koşulları için ayrı onay istenir; ticari kullanıma uygun varsaymayın. Etkileşimsiz kullanımda `--yes --accept-voice-license` birlikte gerekir. Ses istemiyorsanız `--skip-voice`; yalnız sesi kurmak için `npm run setup:voice` kullanın. Başka model/özel ses dosyaları korunur. Değiştirilen mevcut `.env` yedeklenir; ağırlıklar Git'e eklenmez.
 
 İlk başarılı kurulum `local-ai/model-lock.json` oluşturur. Ekipçe kökeni/digest'i inceledikten sonra bu küçük dosyayı Git'e ekleyin; sonraki kurulumlar farklı digest'i sessizce kabul etmez. Yardım: `npm run setup:local-ai -- --help`. Ayrıntılar ve lisans/onay koşulları: [yerel AI rehberi](docs/LOCAL_AI.md).
+
+Ses için ayrıca `local-ai/voice-model-lock.json` revizyon/checksum kaydı oluşur; inceleme sonrası bunu da commit edebilirsiniz. Kurulum kalıcı servis başlatmaz. Ses kullanırken ayrı terminalde `npm run voice:server`, ardından `npm run dev` çalıştırın. [Otomatik ses kurulumunun ayrıntıları](docs/DUAL_AGENT_VOICE.md).
 
 ## API'yi hızlı deneme
 
@@ -82,6 +87,7 @@ Teknoloji veya tasarım seçimi henüz yapılmadı; bu depoya yerine geçecek bi
 - [Backend geliştirme ve yeniden kullanım](server/README.md)
 - [AI-ML çalışma alanı](docs/AI_ML.md)
 - [Yerel AI / MedGemma araştırması ve kurulum hazırlığı](docs/LOCAL_AI.md)
+- [İki-model akışı, yerel ses servisi ve mikrofon entegrasyonu](docs/DUAL_AGENT_VOICE.md)
 - [Kalite kontrolü ve bilinen sınırlar](docs/QUALITY.md)
 - [API demo senaryosu](DEMO_SCRIPT.md)
 
@@ -95,12 +101,16 @@ npm audit
 
 Yerel AI adaptörü `server/localAi.ts` içindedir; varsayılan kapalıdır. Açıkça çalıştırılan kurulum aracı onayla modeli hazırlar; normal API başlangıcı veya `npm ci` model indirmez. `npm run ai:check` yalnız yapılandırılmış Ollama aliasını kontrol eder; kurulum aracındaki üretim testiyle aynı şey değildir. Kullanıcının seçtiği Ollama etiketi `medgemma1.5:4b` varsayılan kurulum adayıdır; bu etiket tek başına resmi Google dağıtımı/köken kanıtı sayılmaz.
 
+Genel sohbet modeli **Qwen3 1.7B** olarak seçildi. MedGemma hazırsa yalnız sohbet modelini kurmak/etkinleştirmek için `npm run setup:companion` kullanın; ses ve MedGemma aşamalarını tekrarlamaz. `COMPANION_AI_*` ve `local-ai/companion-model-lock.json` ayrı tutulur; mevcut özel model seçimi sessizce değiştirilmez. `/api/chat` bulgu seçmeden doğrudan mesaj kabul eder: genel sohbet Qwen3'e, sağlık eğitimi soruları MedGemma'ya gider; sağlık yanıtında iletişim modeli yalnız empatik giriş seçer. Üretilen genel sağlık bilgisi kişisel tanı değildir. Acil uyarılar korunur. **Clone/npm ci model indirmez; gerçek Qwen3 ve mikrofon kalite testi ayrıca gerekir.** [İki-model/ses rehberi](docs/DUAL_AGENT_VOICE.md).
+
 `npm run build` yalnız TypeScript doğrulaması yapar; frontend paketi veya `dist/` üretmez. Node yerleşik TypeScript desteğiyle kaynak dosyaları doğrudan çalıştırır. Testler geçici veritabanı kullanır; yerel kayıtlarınızı değiştirmez. CI aynı kontrolleri çalıştırır.
 
 ## Yapı
 
 ```text
 server/                 HTTP API, SQLite, istek güvenliği, isteğe bağlı Gemini
+tools/voice/            İsteğe bağlı CPU STT/TTS servisi (yerel ağırlık gerekir)
+clients/               Gelecek frontend için mikrofon/oynatma modül örneği
 local-ai/               Yerel model içeri aktarma şablonu (ağırlık içermez)
 scripts/                Onaylı yerel AI kurulumu ve hazır olma kontrolü
 src/triage.ts           Dünya/uzay kuralları ve sağlık tipleri

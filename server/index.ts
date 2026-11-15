@@ -31,8 +31,11 @@ import { MAX_IMAGE_CHARS, validateReading } from '../src/validate.ts'
 import { validateEmergencySteps } from '../src/validate.ts'
 import { canReadEmergency, canReadEvent, canReadMessage, MESSAGE_MAX_CHARS, REPORT_MAX_CHARS } from '../src/access.ts'
 import { assessmentFor } from '../src/assessment.ts'
-import { readJson, rateLimiter, RequestError } from './http.ts'
+import { readJson, readBinary, rateLimiter, RequestError } from './http.ts'
 import { explainLocally, localAiStatus } from './localAi.ts'
+import { companionStatus, conversationTurn, conversationRoute } from './conversation.ts'
+import { MAX_VOICE_BYTES, ReplyReceipts, synthesizeVoice, transcribeVoice, voiceStatus } from './voice.ts'
+import { serveFrontend } from './static.ts'
 
 const PORT = Number(process.env.API_PORT ?? 8787)
 const dbFile = process.env.DB_FILE ?? 'data/crew-health.sqlite'
@@ -55,6 +58,9 @@ for (const [table, column, type] of [['checkins', 'by_user', 'TEXT'], ['events',
 const sessionLifetimeMs = 12 * 60 * 60 * 1000
 const allowLogin = rateLimiter(10, 60_000)
 const allowLocalAi = rateLimiter(6, 60_000)
+const allowChat = rateLimiter(6, 60_000)
+const allowVoice = rateLimiter(12, 60_000)
+const replyReceipts = new ReplyReceipts()
 
 // The demo PIN is stored as a salted hash, the way a real password would be.
 const salt = randomBytes(16)
@@ -147,6 +153,7 @@ const server = createServer(async (req, res) => {
   const path = url.pathname
   const method = req.method ?? 'GET'
   try {
+    if (await serveFrontend(req, res, path)) return
     if (method === 'GET' && path === '/api/health') return send(res, 200, { ok: true })
     if (method === 'GET' && path === '/api/users') return send(res, 200, { users: USERS })
     if (method === 'GET' && path === '/api/reword') return send(res, 200, { enabled: rewordEnabled() })
@@ -180,6 +187,54 @@ const server = createServer(async (req, res) => {
     if (method === 'GET' && path === '/api/state') return send(res, 200, stateFor(user))
 
     if (method === 'GET' && path === '/api/ai/status') return send(res, 200, await localAiStatus())
+
+    if (method === 'GET' && path === '/api/ai/pipeline/status') {
+      const [medical, companion] = await Promise.all([localAiStatus(), companionStatus()])
+      return send(res, 200, { medical, companion, voice: voiceStatus(), memory: 'stateless' })
+    }
+
+    if (method === 'POST' && path === '/api/chat') {
+      if (user.role === 'surgeon') return send(res, 403, { error: 'This pilot chat is for the onboard crew only.' })
+      const body = await readJson(req)
+      const message = text(body.message, 2000)
+      const language = body.language ?? 'tr'
+      const day = body.day ?? 60
+      const mission = body.mission ?? 'mars'
+      const crewId = body.crewId ?? user.id
+      if (body.inputOrigin === 'voice' && body.transcriptConfirmed !== true) return send(res, 400, { error: 'Confirm the transcript before sending it to chat.' })
+      if (!message || !validDay(day) || !isMission(mission) || (language !== 'tr' && language !== 'en') || typeof crewId !== 'string' || (body.findingId !== undefined && typeof body.findingId !== 'string') || (body.inputOrigin !== undefined && body.inputOrigin !== 'text' && body.inputOrigin !== 'voice')) return send(res, 400, { error: 'Invalid chat message or context.' })
+      if (crewId !== 'cabin' && !canSee(user, crewId)) return send(res, 403, { error: 'You may only chat about authorized findings.' })
+      const subject = assessmentFor(user, day, allCheckIns(), mission, 'space').subjects.find((s) => s.id === crewId)
+      if (!subject) return send(res, 404, { error: 'Subject not found.' })
+      const requested = body.findingId === undefined ? undefined : subject.space.find((f) => f.id === body.findingId)
+      if (body.findingId !== undefined && !requested) return send(res, 404, { error: 'Finding not found.' })
+      // An existing urgent finding for this subject takes priority over social chat.
+      const urgentFinding = subject.space.find((f) => f.level === 'red')
+      if (!urgentFinding && conversationRoute(message, false) !== 'urgent' && !allowChat(user.id)) return send(res, 429, { error: 'Too many chat requests.' })
+      const finding = urgentFinding ?? requested
+      const result = await conversationTurn(message, language as 'tr' | 'en', finding, finding ? subject.info[finding.id] : undefined)
+      const replyId = replyReceipts.issue(user.id, result.reply)
+      return send(res, 200, { ...result, replyId, replyExpiresInSeconds: 120, persisted: false })
+    }
+
+    if (method === 'GET' && path === '/api/voice/status') return send(res, 200, voiceStatus())
+    if (method === 'POST' && (path === '/api/voice/transcribe' || path === '/api/voice/speak')) {
+      if (req.headers['x-voice-consent'] !== 'true') return send(res, 400, { error: 'Explicit X-Voice-Consent: true is required.' })
+      if (!allowVoice(user.id)) return send(res, 429, { error: 'Too many voice requests.' })
+      if (path === '/api/voice/transcribe') {
+        const language = url.searchParams.get('language') ?? 'tr'
+        if (language !== 'tr' && language !== 'en') return send(res, 400, { error: 'Language must be tr or en.' })
+        if (req.headers['content-type']?.split(';')[0].trim() !== 'audio/wav') return send(res, 415, { error: 'Upload raw mono PCM16 WAV at 16000 Hz.' })
+        return send(res, 200, await transcribeVoice(await readBinary(req, MAX_VOICE_BYTES), language))
+      }
+      const body = await readJson(req)
+      if (typeof body.replyId !== 'string' || body.replyId.length > 100) return send(res, 400, { error: 'Provide a chat replyId, not arbitrary text.' })
+      const reply = replyReceipts.get(user.id, body.replyId)
+      if (!reply) return send(res, 404, { error: 'Reply not found or expired.' })
+      const wav = await synthesizeVoice(reply)
+      res.writeHead(200, { 'Content-Type': 'audio/wav', 'Content-Length': wav.byteLength, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' })
+      return res.end(wav)
+    }
 
     if (method === 'POST' && path === '/api/ai/explain') {
       if (user.role === 'surgeon') return send(res, 403, { error: 'Earth can only read reports delivered to it.' })

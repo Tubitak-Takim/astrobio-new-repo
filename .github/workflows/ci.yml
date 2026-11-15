@@ -1,4 +1,4 @@
-name: Astrobio backend checks
+name: Astrobio checks
 on: [push, pull_request]
 jobs:
   verify:
@@ -12,4 +12,14 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - run: node --check clients/voice-client.js
+      - run: node --check frontend/js/backend.js
+      - run: node --check frontend/js/shell.js
+      - run: node --check frontend/js/app.js
+      - run: node --check frontend/js/data.js
+      - run: node --check frontend/js/anatomy.js
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -B -m unittest discover -s tools/voice -p 'test_*.py'
       - run: npm audit --audit-level=high

@@ -1,0 +1,4 @@
+Open Anatomy 3D modelinizi buraya `anatomy-male.glb` adıyla koyun.
+Kaynak: https://cdn.jsdelivr.net/npm/open-anatomy-3d@0.1.0/models/anatomy-male.glb
+Model bu ZIP'e dahil değil. İnternet varsa CDN'den de yüklenebilir.
+CC BY 4.0 — Open Anatomy 3D, BodyParts3D © DBCLS, HuBMAP, MakeHuman.

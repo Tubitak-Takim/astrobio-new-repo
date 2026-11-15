@@ -1,6 +1,6 @@
 # Astrobio backend
 
-Sorumlu: **Muhammet Kerim Şahin**. Node 24+ HTTP sunucusu ve yerleşik SQLite kullanılır. Frontend ve üretim çalışma zamanı npm bağımlılığı yoktur.
+Sorumlu: **Muhammet Kerim Şahin**. Node 24+ HTTP sunucusu ve yerleşik SQLite kullanılır. Node üretim çalışma zamanı npm bağımlılığı yoktur. `server/static.ts`, `frontend/` arayüzünü aynı origin'de sunar; `/` HTML, `/api/*` mevcut API sözleşmesidir. Public frontend dışındaki proje dosyaları sunulmaz.
 
 ## Çalıştırma
 
@@ -25,6 +25,8 @@ npm run dev
 Yerel AI, `server/localAi.ts` içindeki bağımsız Ollama adaptörüdür; model indirmez veya başlatmaz. `/api/ai/status` ve rol kontrollü `/api/ai/explain` endpointleri eklendi. Araştırma ve kullanıcı tarafından tamamlanacak kurulum adımları: [LOCAL_AI.md](../docs/LOCAL_AI.md). `npm run ai:check` kurulu aliası kontrol eder; kapalı/hazır değilse hata çıkış kodu verir. `.env` içindeki `LOCAL_AI_*` ayarları Ollama daemon'unu değil yalnız Astrobio bağlantısını yapılandırır.
 
 Clone sonrası `npm run setup:local-ai`, onaylı indirme/üretim testi/yerel ayar yazımını tek komutta yapar. Ollama servisinin ve sürücünün önceden kurulmuş olması gerekir; araç eksikleri bildirir, otomatik sistem kurulumu yapmaz. İlk başarılı çalıştırmanın `local-ai/model-lock.json` dosyası ekipçe incelenip Git'e eklenmelidir.
+
+İki-model akışı: `/api/chat`, `server/conversation.ts` ve `server/directChat.ts`. Bulgu seçimi gerekmeden genel sohbet Qwen3 1.7B'ye, sağlık eğitimi soruları MedGemma'ya gider. `npm run setup:companion` seçili varsayılan `qwen3:1.7b` modelini ayrı ayar/kilitle kurar; mevcut özel modeller korunur. Sağlık metni iletişim modeline yeniden yazdırılmaz. Ses API'si `server/voice.ts`, CPU servisi `tools/voice/`, ön plan başlatıcısı `npm run voice:server` içindedir. Tam `setup:local-ai` medical→companion→voice aşamalarını onayla hazırlar. Sesi atlamak için `--skip-voice`, yalnız ses için `npm run setup:voice`. Kurulum API başlangıcında çalışmaz. Ana Node API'nin npm çalışma zamanı bağımlılığı hâlâ yoktur; Python ses bileşeni ayrıdır. [İki-model/ses rehberi](../docs/DUAL_AGENT_VOICE.md).
 
 ## Başka proje ile kullanım
 

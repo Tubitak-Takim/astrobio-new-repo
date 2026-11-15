@@ -15,10 +15,12 @@ npm run dev
 Komut etkileşimli olarak kullanım koşullarını/indirmeyi/ayar değişikliğini onaylatır. Önceden gözden geçirilmiş otomasyon için:
 
 ```bash
-npm run setup:local-ai -- --yes
+npm run setup:local-ai -- --yes --accept-voice-license
 ```
 
-`--yes` lisans incelemesinin yerine geçmez; koşulları önceden değerlendirmiş operatörün açık onayıdır. Onay yoksa ve terminal etkileşimli değilse işlem durur. `npm ci` veya normal API başlangıcında gizli model indirme yoktur.
+`--yes` lisans incelemesinin yerine geçmez; koşulları önceden değerlendirmiş operatörün açık onayıdır. Ses kurulumu artık varsayılan dahil olduğu için ayrıca `--accept-voice-license` veya ayrı etkileşimli ses onayı gerekir. Yalnız dil modeli için `--skip-voice` kullanın. Onay yoksa ve terminal etkileşimli değilse işlem durur. `npm ci` veya normal API başlangıcında gizli model indirme yoktur. [Ses paket/ağırlık kurulumu ve lisans koşulları](DUAL_AGENT_VOICE.md).
+
+Güncel tam kurulum MedGemma ve seçilmiş genel sohbet modeli `qwen3:1.7b` rollerini sırayla hazırlar. Mevcut MedGemma kurulumuna yalnız Qwen3 eklemek için `npm run setup:companion` kullanın; ses aşaması tekrarlanmaz. Yalnız medikal rol için `--role medical --skip-voice` verin. Ayrı companion ayar/kilidi ve koşullar [iki-model rehberindedir](DUAL_AGENT_VOICE.md).
 
 ### Aracın yaptığı işler
 

@@ -50,3 +50,23 @@ export function rateLimiter(limit: number, windowMs: number) {
     return true
   }
 }
+
+export function readBinary(req: IncomingMessage, maxBytes: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    let size = 0
+    let failed = false
+    req.on('data', (chunk: Buffer) => {
+      if (failed) return
+      size += chunk.length
+      if (size > maxBytes) {
+        failed = true
+        chunks.length = 0
+        reject(new RequestError(413, 'Audio upload is too large.'))
+      } else chunks.push(chunk)
+    })
+    req.on('end', () => { if (!failed) resolve(Buffer.concat(chunks)) })
+    req.on('error', reject)
+    req.on('aborted', () => reject(new RequestError(400, 'Audio upload was interrupted.')))
+  })
+}

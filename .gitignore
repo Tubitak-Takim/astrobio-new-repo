@@ -16,3 +16,7 @@ local-ai/*.setup-*.tmp
 *.safetensors
 .cache/
 .venv/
+__pycache__/
+tools/voice/models/
+local-ai/recordings/
+*.onnx

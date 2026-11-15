@@ -11,6 +11,9 @@
     "typecheck": "tsc --noEmit",
     "ai:check": "node --env-file-if-exists=.env scripts/check-local-ai.ts",
     "setup:local-ai": "node scripts/setup-local-ai.ts",
+    "setup:companion": "node scripts/setup-local-ai.ts --role companion --skip-voice",
+    "setup:voice": "node scripts/setup-local-ai.ts --voice-only",
+    "voice:server": "node --env-file-if-exists=.env scripts/run-voice.ts",
     "test:watch": "vitest",
     "test": "vitest run"
   },
@@ -19,6 +22,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
+    "happy-dom": "^21.0.4",
     "typescript": "^5.6.0",
     "vitest": "^5.1.0"
   },

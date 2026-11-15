@@ -4,7 +4,7 @@ Sorumlu: **Zehra Kaygısız**. Bu belge teknik durum kaydıdır; klinik onay de�
 
 ## Güncel kapsam
 
-Astrobio artık yalnız backend ve UI'dan bağımsız alan mantığı içerir. Eski ekranlar, tarayıcı demo arka ucu, stiller, 3D modeller ve frontend derleme araçları kaldırılmıştır. Yeni frontend sıfırdan geliştirilecektir; mevcut API rotaları ve SQLite dosyası korunur.
+Astrobio artık sağlanan HTML/CSS/JS frontend'i ve UI'dan bağımsız backend alan mantığını birlikte içerir. Eski React sürümü geri getirilmedi; `frontend/` tasarımı aynı-origin API'ye bağlandı. Mevcut API yetkileri ve SQLite dosyası korunur. Aşağıdaki eski aşama doğrulamaları tarihsel kayıttır.
 
 Korunan iyileştirmeler: rol kontrollü sağlık değerlendirmesi, mesaj/acil durum gizliliği, Dünya yanıtlarında alıcı, 16.000 karakter rapor sınırı, muhafazakâr düşük WBC incelemesi, CO₂ açıklama düzeltmesi, UTF-8 güvenli gövde okuma, giriş hız sınırı ve 12 saatlik oturum ömrü.
 
@@ -19,7 +19,7 @@ npm run build
 npm audit
 ```
 
-`build` yalnız Node odaklı TypeScript kontrolüdür; web paketi üretmez. Testler Node ortamında çalışır. Tarayıcı demo testleri yerine aynı gizlilik kuralları doğrudan alan fonksiyonlarında ve gerçek HTTP API'sinde sınanır. Test veritabanları ayrı geçici dizinde oluşturulup temizlenir; mevcut `data/crew-health.sqlite` kullanılmaz.
+`build` TypeScript kontrolüdür; frontend doğrudan statik sunulduğundan web paketi üretmez. Alan ve HTTP API testleri Node'da, frontend adaptör/yerleşim testleri happy-dom'da çalışır. Test veritabanları ayrı geçici dizinde oluşturulur; mevcut `data/crew-health.sqlite` kullanılmaz. DOM testleri gerçek tarayıcı görsel/WebGL/mikrofon doğrulamasının yerine geçmez.
 
 Astrobio geçiş doğrulaması: **47 test başarılı**, TypeScript kontrolü başarılı, `npm audit` **0 açık** bildirdi. Belge bağlantıları ve frontend dosyalarının kaldırılması kontrol edildi; mevcut SQLite dosyasının SHA256 değeri değişmedi. Klinik doğrulama veya yeni frontend için tarayıcı testi yapılmadı.
 
@@ -37,10 +37,28 @@ Bu paragraf ilk hazırlık anını kaydeder. Kullanıcı daha sonra `medgemma1.5
 
 Gerçek CLI'nin `--help` yolu ayrıca çalıştırıldı. Kullanıcının gerçek modeline üretim isteği gönderen veya `.env` dosyasını değiştiren tam kurulum burada çalıştırılmadı; indirme/sistem kurulumu yapılmadı. İlk gerçek çalıştırma kullanıcı onayıyla yapılmalıdır. Model kilidi ilk başarılı çalıştırmada oluşur ve inceleme sonrası ekipçe commit edilmelidir.
 
+## İki-model ve ses hazırlığı doğrulaması
+
+- **98 Node testi + 6 Python protokol testi başarılı.** TypeScript kontrolü ve mikrofon yardımcısının JavaScript sözdizimi kontrolü geçti. Node bağımlılık taraması 0 açık bildirdi; opsiyonel Python konuşma paketleri kurulmadığı için bu tarama onları kapsamaz.
+- Gerçek HTTP entegrasyon testleri iki modelin sırasını, bulgu yetkisini, acil bypass'ı, ses onayını, transkript onayını ve ses yanıtının kullanıcıya özel olmasını sahte servislerle doğrular.
+- İletişim modeli henüz seçilmedi; `COMPANION_AI_MODEL` boş kalır. Kurulumun `--role companion` yolu ayrı ayar/kilit kullanır; mevcut MedGemma kilidini değiştirmeme testi eklendi.
+- Sağlık yanıtı konuşma modeline serbestçe yeniden yazdırılmaz. Model yalnız empatik giriş seçer; kanonik sağlık metni sunucuda korunur. Genel sohbet kapsamı bilerek sınırlıdır; kriz kelime kuralları klinik triyaj değildir.
+- STT/TTS yalnız sayısal loopback servise bağlanır. Ses dosyaları ve transkript kalıcı saklanmaz; TTS için son yanıt metni kullanıcıya özel, sınırlı ve zamanlayıcıyla temizlenen iki dakikalık RAM receipt'inde tutulur.
+- `tools/voice/` CPU faster-whisper/Piper referans servisi, `clients/voice-client.js` AudioWorklet mikrofon/oynatma yardımcısıdır. Model/voice ağırlıkları, Python paketleri indirilmedi; gerçek mikrofon, hoparlör, seçilecek ikinci model ve Türkçe ses doğruluğu uçtan uca denenmedi. Bunlar tamamlanmadan hazır sesli ürün iddiası yapılmamalı.
+- İncelenen bir Türkçe Piper ses kartında CC BY-NC-SA kısıtı görüldüğü için o ses varsayılan yapılmadı. Her ses/checkpoint için lisans incelemesi gerekir. Tam kurulum ve kabul işleri: [DUAL_AGENT_VOICE.md](DUAL_AGENT_VOICE.md).
+
+## Otomatik ses kurulumunun ek doğrulaması
+
+Ses ortamı/paket/ağırlık hazırlığı ana kurulum komutuna varsayılan dahil edildi; `setup:voice`, `--skip-voice`, ayrı ses lisansı onayı ve `--update-voice-lock` eklendi. Kurulum mevcut sanal ortamı kontrol eder, uygun Python yoksa mevcut uv üzerinden 3.11 hazırlayabilir, ardından yalnız venv'de paket kurar ve `pip check` çalıştırır. Ağırlık revizyon/checksum manifesti ve sentetik TTS→STT testi başarılı olmadan yeni ses ayarları yazılmaz.
+
+Doğrulama: **110 Node testi ve 14 Python testi başarılı**, TypeScript kontrolü başarılı. İndirme, ortam kurma ve konuşma motorları testlerde taklit edildi. Gerçek `setup:voice --yes` çağrısının ayrı ses lisansı onayı olmadan durduğu doğrulandı; hiçbir gerçek pip/model kurulumu veya kullanıcı `.env` değişikliği yapılmadı. Gerçek ağırlık indirme ve motor uyumluluğu, kullanıcı lisans onayıyla betiği çalıştırdığında ayrıca sınanmalıdır.
+
+Varsayılan Türkçe adayın kartındaki CC BY-NC-SA veri koşulları nedeniyle `--yes` tek başına yeterli değildir. Ticari kullanım/voice seçimi ayrıca incelenmelidir; yeni kurulum otomasyonunun varlığı ses kalitesi veya klinik doğrulama anlamına gelmez.
+
 ## Backend kabul listesi
 
-- [ ] `npm run dev` yalnız Astrobio API'yi başlatıyor; dosya değişikliğinde yeniden yükleniyor.
-- [ ] `/api/health` çalışıyor; kök adresten HTML beklenmiyor.
+- [ ] `npm run dev` arayüzü ve Astrobio API'yi aynı sunucuda başlatıyor; sunucu dosyası değişikliğinde yeniden yükleniyor.
+- [ ] `/api/health` JSON, kök adres `/` arayüz HTML'i döndürüyor.
 - [ ] Mürettebat kendi check-in'ini okuyup yazabiliyor; diğer kişinin verisine erişemiyor.
 - [ ] CMO bütün ekip değerlendirmelerini görebiliyor.
 - [ ] Dünya, gecikme dolmadan gemi raporunu göremiyor ve check-in API'sine erişemiyor.
@@ -52,7 +70,13 @@ Gerçek CLI'nin `--help` yolu ayrıca çalıştırıldı. Kullanıcının gerçe
 
 ## Yeni frontend için sonraki kabul işleri
 
-UI henüz yoktur. Elif'in geliştireceği arayüzde başarısız kayıtta formun korunması, alıcı seçimi, bağlantı hataları, responsive düzen, klavye/ekran okuyucu, simülasyon ve kaynak etiketleri uçtan uca test edilmelidir. Bu sürümün Node testleri bunların yerine geçmez.
+Yeni arayüz entegredir. DOM testleri giriş, kanonik bulgular, gerçek chat API adaptörü, rapor iletimi, oturum temizliği ve ses onayını kapsar; tüm HTML sayfaları statik HTTP testinden geçer. Elif ve Zehra gerçek tarayıcıda responsive düzen, klavye/ekran okuyucu, WebGL yedeği ve mikrofon/hoparlör akışını ayrıca sınamalıdır. Demo skorlar yetkili sunucu verileriyle karıştırılmamalıdır.
+
+Frontend entegrasyonu doğrulaması (2026-11-15): **121 Node/DOM testi + 14 Python testi başarılı**, TypeScript kontrolü başarılı, npm audit **0 açık**. Kaynak frontend'in 24 dosyasının tamamının aktarımı doğrulandı; PDF/demo JSON/görsel varlıklar korundu ve kullanıcının istediği geçici planlama klasörü kaldırıldı. HTTP testleri gerçek fakat geçici SQLite sunucusunu, AI/ses testleri taklit servisleri kullanır; kullanıcının gerçek modelleri/veritabanı/mikrofonu bu kontrollerde kullanılmadı.
+
+Arayüz düzenlemesi: aktif arayüz İngilizcedir; backend bağlantı paneli yalnız Interactive Health Check içindedir. AI/rapor/profil/not işlevleri kendi sayfalarında korunur. Günlük gösterge sayfalarında panel ve yetkili sağlık verisi isteği bulunmadığı rota bazında sınanır. **134 Node/DOM testi ve TypeScript kontrolü başarılıdır.** İngilizce STT/chat dil istekleri doğrulanır; kurulu ses modeli otomatik değiştirilmez.
+
+Doğrudan mesaj/Qwen3 güncellemesi: **147 Node/DOM testi ve TypeScript kontrolü başarılıdır.** Kullanıcının örnek genel sağlık sorusunun bulgu olmadan MedGemma'ya aynen gitmesi, genel konuşmanın Qwen rolüne gitmesi, acil bypass, çıktı sınırı/reasoning reddi ve ortak üretim kilidi sınanır. Geçici sandbox'ta gerçek kurulum betiği sahte Ollama ile çalıştırılarak medical→companion sırası, yalnız Qwen indirme isteği, ayrı kilitler ve MedGemma ayarlarının korunması doğrulanır. Gerçek Qwen ağırlığı indirilmedi/çalıştırılmadı; klinik doğruluk ve üretim kalitesi doğrulanmış sayılmaz.
 
 ## Açık işler / üretim engelleri
 

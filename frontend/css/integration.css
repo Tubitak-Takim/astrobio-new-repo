@@ -1,0 +1,17 @@
+.backend-panel{margin-bottom:24px;border:1px solid #37637e;padding:22px;background:#102338;border-radius:16px}
+.backend-panel h2{margin:8px 0 14px}.backend-panel p{line-height:1.6}
+.backend-toolbar{display:flex;flex-wrap:wrap;align-items:end;gap:12px;margin:14px 0}
+.backend-toolbar label{display:grid;gap:6px;font-size:12px;color:#aec6d8}
+.backend-toolbar select,.backend-toolbar input{max-width:240px}
+.backend-panel pre,.backend-report{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;font-size:13px;line-height:1.7}
+.backend-error{color:#ffb29f;white-space:pre-wrap}.backend-info{color:#a7cde6;font-size:13px}
+.backend-findings{display:grid;gap:10px;margin-top:14px}.backend-finding{padding:14px;border:1px solid #3a647c;border-left:4px solid #6bd8b1;border-radius:8px}
+.backend-finding.amber{border-left-color:#ffb842}.backend-finding.red{border-left-color:#ff795c}
+.backend-finding summary{cursor:pointer;font-weight:bold}.backend-finding p{margin:8px 0}
+.backend-panel textarea{width:100%;min-height:100px}.backend-panel button:disabled{opacity:.5;cursor:wait}
+.backend-messages{display:grid;gap:10px;max-height:420px;overflow:auto;margin:16px 0}
+.backend-message{padding:12px;border:1px solid #31516a;border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere}
+.backend-checkin{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:14px 0}
+.backend-checkin label{display:grid;gap:6px;font-size:12px}.backend-checkin input{width:100%}
+.backend-panel .bubble{white-space:pre-wrap}.backend-demo-notice{padding:12px 16px;margin-bottom:16px;border:1px dashed #a77e42;border-radius:8px;color:#f0c68b;font-size:13px}
+.account-workspace{margin-bottom:24px}.account-workspace h1{margin-bottom:12px}.account-workspace p{line-height:1.6}.account-workspace textarea{width:100%;min-height:100px}.account-workspace pre{white-space:pre-wrap;overflow-wrap:anywhere}.account-workspace .backend-report{margin:16px 0}

@@ -1,0 +1,7 @@
+Bu klasöre önceden indirdiğiniz gezegen fotoğraflarını koyun:
+leo.jpg
+moon.jpeg
+mars.jpeg
+
+Fotoğraflar yoksa arayüzde temsilî gezegen grafiklerinden yararlanılır.
+Kaynak ve lisanslarını ayrıca belgeleyin.

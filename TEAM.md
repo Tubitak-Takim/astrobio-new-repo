@@ -11,7 +11,7 @@ Bu depo, mevcut prototip temel alınarak aşağıdaki ekibin geliştireceği sü
 
 ## Çalışma sınırları
 
-- **Frontend sıfırdan geliştirilecek.** Eski arayüz ve varlıkları kaldırıldı; yeni tasarım/teknoloji henüz belirlenmiş veya uygulanmış değildir. Bu depo artık backend odaklıdır.
+- **Yeni frontend entegre edildi.** Sağlanan HTML/CSS/JS tasarımı `frontend/` altında aynı-origin API'ye bağlıdır. Elif arayüzü bu temel üzerinde geliştirir; bağımsız sentetik skorları yetkili backend bulgularından ayrı tutar.
 - **Backend yeniden kullanılacak ve uyarlanabilecek.** Yeni frontend, değerlendirmeleri `/api/assessment` üzerinden alabilir; React veya anatomik modelleri kopyalaması gerekmez.
 - Mevcut AI-ML katmanı bir tahmin modeli değildir. Işıkhan'ın geliştireceği modeller, doğrulanmış klinik kural gibi gösterilemez; ayrıntılar [AI-ML çalışma rehberinde](docs/AI_ML.md).
 - Ölçüm eşikleri ekip içi teknik kararla klinik olarak doğrulanmış hale gelmez. Kaynak durumu ve demo etiketi korunur.
@@ -32,5 +32,6 @@ Bu depo, mevcut prototip temel alınarak aşağıdaki ekibin geliştireceği sü
 3. Işıkhan: asistan soru-cevap test kümesi, belirsizlik ve kaynak gösterimi; gerekiyorsa ayrı deneysel model prototipi.
    Yerel model için: [MedGemma araştırmasındaki](docs/LOCAL_AI.md) seçilmiş `medgemma1.5:4b` etiketinin köken/lisansını ve kilit digest'ini incelemek. Kurulum aracı yalnız açık onayla indirir; quantization ve sistem sürücüsü kurulumu yapmaz.
 4. Tüm ekip: ölçüm geçmişi modelini tasarlama, yeni arayüzü bağlama ve uçtan uca testler.
+5. İki-model/ses pilotu: Işıkhan ikinci model ve ses ağırlığı/lisans değerlendirmesi; Muhammet yerel servisler ve orkestrasyon; Elif mikrofon izni/transkript onayı/oynatma; Zehra gerçek cihaz, Türkçe ve kriz senaryoları. [Hazırlanan akış](docs/DUAL_AGENT_VOICE.md).
 
 Başlangıç belgeleri: [API](docs/API.md), [frontend devri](docs/FRONTEND_HANDOFF.md), [backend yeniden kullanımı](server/README.md), [kalite ve bilinen sınırlar](docs/QUALITY.md).

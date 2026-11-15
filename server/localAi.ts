@@ -3,6 +3,7 @@
 import type { Finding } from '../src/triage.ts'
 import type { Provenance } from '../src/model.ts'
 import { SOURCES } from '../src/data/sources.ts'
+import { acquireInference } from './inference.ts'
 
 export type LocalAiConfig = { enabled: boolean; baseUrl: string; model: string; timeoutMs: number }
 export type LocalAiState = 'disabled' | 'not_configured' | 'invalid_configuration' | 'unavailable' | 'model_missing' | 'remote_model_rejected' | 'ready'
@@ -20,7 +21,7 @@ export function localAiConfig(env: NodeJS.ProcessEnv = process.env): LocalAiConf
   return { enabled: env.LOCAL_AI_ENABLED === 'true', baseUrl: url.origin, model, timeoutMs }
 }
 
-async function readJson(response: Response, maxBytes = 131_072): Promise<Record<string, unknown>> {
+export async function readLocalJson(response: Response, maxBytes = 131_072): Promise<Record<string, unknown>> {
   if (!response.ok || !response.body) throw new Error('Local runtime request failed')
   const reader = response.body.getReader()
   let size = 0
@@ -39,9 +40,9 @@ async function readJson(response: Response, maxBytes = 131_072): Promise<Record<
   return data as Record<string, unknown>
 }
 
-async function probe(config: LocalAiConfig, signal: AbortSignal): Promise<LocalAiState> {
+export async function probeLocalModel(config: LocalAiConfig, signal: AbortSignal): Promise<LocalAiState> {
   const response = await fetch(`${config.baseUrl}/api/tags`, { signal, redirect: 'error' })
-  const data = await readJson(response)
+  const data = await readLocalJson(response)
   if (!Array.isArray(data.models)) throw new Error('Invalid model inventory')
   const installed = data.models.find((value: unknown) => {
     if (!value || typeof value !== 'object') return false
@@ -54,13 +55,13 @@ async function probe(config: LocalAiConfig, signal: AbortSignal): Promise<LocalA
   return 'ready'
 }
 
-export async function localAiStatus(): Promise<LocalAiStatus> {
+export async function localAiStatus(configured?: LocalAiConfig): Promise<LocalAiStatus> {
   let config: LocalAiConfig
-  try { config = localAiConfig() } catch { return { state: 'invalid_configuration', enabled: false, runtime: 'ollama', model: null } }
+  try { config = configured ?? localAiConfig() } catch { return { state: 'invalid_configuration', enabled: false, runtime: 'ollama', model: null } }
   const base = { enabled: config.enabled, runtime: 'ollama' as const, model: config.model || null }
   if (!config.enabled) return { ...base, state: 'disabled' }
   if (!config.model) return { ...base, state: 'not_configured' }
-  try { return { ...base, state: await probe(config, AbortSignal.timeout(3000)) } }
+  try { return { ...base, state: await probeLocalModel(config, AbortSignal.timeout(3000)) } }
   catch { return { ...base, state: 'unavailable' } }
 }
 
@@ -74,9 +75,7 @@ const SYSTEM = [
   'If the material is insufficient, say so. Do not claim clinical validation.',
 ].join(' ')
 
-let active = false
-
-export async function explainLocally(finding: Finding, provenance: Provenance | undefined, language: 'tr' | 'en') {
+export async function explainLocally(finding: Finding, provenance: Provenance | undefined, language: 'tr' | 'en', options: { unload?: boolean } = {}) {
   const original = {
     finding,
     provenance: provenance ?? null,
@@ -90,11 +89,11 @@ export async function explainLocally(finding: Finding, provenance: Provenance | 
   try { config = localAiConfig() } catch { return { ...base, state: 'invalid_configuration' as const } }
   if (!config.enabled) return { ...base, state: 'disabled' as const }
   if (!config.model) return { ...base, state: 'not_configured' as const }
-  if (active) return { ...base, state: 'busy' as const }
-  active = true
+  const release = acquireInference()
+  if (!release) return { ...base, state: 'busy' as const }
   const signal = AbortSignal.timeout(config.timeoutMs)
   try {
-    const state = await probe(config, signal)
+    const state = await probeLocalModel(config, signal)
     if (state !== 'ready') return { ...base, state }
     // No names, notes, messages, images, user-supplied prompts or other crew data.
     const context = JSON.stringify(original)
@@ -106,7 +105,7 @@ export async function explainLocally(finding: Finding, provenance: Provenance | 
       body: JSON.stringify({
         model: config.model,
         stream: false,
-        keep_alive: '2m',
+        keep_alive: options.unload ? 0 : '2m',
         messages: [
           { role: 'system', content: SYSTEM },
           { role: 'user', content: `Explain the following finding in ${language === 'tr' ? 'Turkish' : 'English'}.\nORIGINAL_DATA:\n${context}` },
@@ -114,7 +113,7 @@ export async function explainLocally(finding: Finding, provenance: Provenance | 
         options: { temperature: 0, num_ctx: 4096, num_predict: 256 },
       }),
     })
-    const data = await readJson(response, 32_768)
+    const data = await readLocalJson(response, 32_768)
     const message = data.message as Record<string, unknown> | undefined
     const output = typeof message?.content === 'string' ? message.content.trim() : ''
     // This catches some errors, NOT hallucinations/negations/new medical advice.
@@ -124,5 +123,5 @@ export async function explainLocally(finding: Finding, provenance: Provenance | 
     return { ...base, state: 'generated' as const, generated: output, model: config.model }
   } catch {
     return { ...base, state: signal.aborted ? 'timeout' as const : 'unavailable' as const }
-  } finally { active = false }
+  } finally { release() }
 }

@@ -1,8 +1,8 @@
-# Astrobio: sıfırdan frontend geliştirme
+# Astrobio: frontend geliştirme ve entegrasyon
 
 Sorumlu: **Elif Nur Özek**. Backend desteği: **Muhammet Kerim Şahin**. Kabul testleri: **Zehra Kaygısız**.
 
-Eski frontend tamamen kaldırıldı: React ekranları, stiller, 3D modeller, ekran görüntüleri, tarayıcı API adaptörü ve localStorage demo arka ucu artık yok. Yeni framework veya tasarım seçilmedi. Bu depoda frontend geliştirme sunucusu bulunmuyor; `npm run dev` yalnız API'yi başlatır.
+Eski React frontend yerine sağlanan HTML/CSS/JS tasarımı `frontend/` altına entegre edildi. `npm run dev` arayüzü ve API'yi aynı origin'de sunar. Giriş, sağlık değerlendirmesi, check-in, AI/ses, rapor ve sunucu notları `frontend/js/backend.js` içindedir. Orijinal tasarım skorları ve BIS grafikleri ayrı sentetik demo olarak korunmuştur; backend sonuçlarıyla karıştırılmamalıdır. [Güncel frontend rehberi](../frontend/README_PROJE.md).
 
 ## Başlangıç akışı
 
@@ -12,6 +12,7 @@ Eski frontend tamamen kaldırıldı: React ekranları, stiller, 3D modeller, ekr
 4. `/api/state` kayıtları, `/api/assessment?day=60&mission=mars&mode=space` değerlendirme ve kaynakları sağlar.
 5. `401` durumunda girişe dönün; `403` için yetki açıklaması, ağ hatasında bağlantı uyarısı gösterin.
 6. İsteğe bağlı yerel AI için `/api/ai/status` ve `/api/ai/explain` kullanın. Orijinal bulguyu/uyarıyı koruyun; `generated:null` bir fallback'tir. Kurulum ve yanıt sözleşmesi [yerel AI rehberinde](LOCAL_AI.md).
+7. İki-model ve ses için `/api/chat` ile `/api/voice/*` uç noktaları ve `clients/voice-client.js` kullanılır. Entegre AI ekranında kayıt izni, transkript onayı ve oynatma ayrı kullanıcı adımlarıdır; otomatik mikrofon açılmaz. [Tam akış ve sınırlamalar](DUAL_AGENT_VOICE.md).
 
 Kesin sözleşme: [API belgesi](API.md). TypeScript tipleri `src/assessment.ts`, `src/model.ts` ve `src/triage.ts` içindedir; ekranları veya Node sunucu kodunu tarayıcı paketine taşımayın. Kendi HTTP adaptörünüzü yazın. API'nin rol filtresini frontend filtreleriyle değiştirmeyin.
 
@@ -27,7 +28,7 @@ const data = await response.json()
 if (!response.ok) throw new Error(data.error)
 ```
 
-Frontend framework'ü bağımsızdır. API sağlığı tarayıcıda `/api/health` ile kontrol edilebilir; `/` adresinin web sayfası döndürmesi beklenmez. Eski `VITE_BACKEND_MODE` ve `API_PROXY_TARGET` ayarları bu depodan kaldırıldı; otomatik tarayıcı demosuna geçiş yoktur.
+Frontend framework bağımsızdır. API sağlığı `/api/health` ile kontrol edilir; `/` artık web arayüzünü döndürür. `server/static.ts` yalnız public frontend dosyalarını ve ses istemcisini sunar; `.env`, SQLite ve model dizinleri erişime kapalıdır. Eski `VITE_BACKEND_MODE` ve `API_PROXY_TARGET` kullanılmaz; API hatasında sessiz demo yanıtına geçilmez.
 
 ## Önerilen ekranlar
 
