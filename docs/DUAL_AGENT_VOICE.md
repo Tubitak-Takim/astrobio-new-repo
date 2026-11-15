@@ -41,6 +41,12 @@ Bas-konuş mikrofonu → yerel STT → kullanıcı transkripti görür/düzeltir
 
 Arayüz İngilizce kalır; sohbet dili Auto/English/Turkish ile seçilebilir. Auto mesaj metninden dil sezgisi kullanır, belirsiz mesajda son tespit edilen dili korur. Giriş/uyarı/servis metinleri de istek diliyle eşleşir. Mikrofon transkripsiyonu için dil açıkça seçilebilir. Önceki sohbet mesajları hâlâ sunucuya otomatik eklenmez.
 
+### Yetkili veritabanı kayıtlarının açıklanması
+
+Kullanıcı sağlık verilerini/kayıtlarını değerlendirmeyi istediğinde `server/healthContext.ts`, yalnız seçili yetkili kişi ve görev günü için bağlam hazırlar. O günkü kaydedilmiş check-in varsa gerçek kayıt değerleri; yoksa açıkça etiketlenmiş simüle sensör akışı kullanılır. Baz çizgi, bütün bulguların seviyesi/ölçümü, üç öncelikli bulgunun ayrıntıları, kaynak/güncellik bilgisi ve en fazla yedi eski check-in'in vital/uyku/kütle/baş ağrısı özeti eklenir. İsim, görüntü, serbest not, mesaj, diğer kişiler ve gelecekteki kayıtlar eklenmez. Genel sohbet/yalnız eğitim sorusu bu paketi almaz.
+
+MedGemma'nın kayıt açıklaması yalnız tamamlanmışsa ve kaynakta/mesajda bulunmayan sayılar üretmemişse yardımcı bağlam olarak kullanılabilir. Bu kontrol her tıbbi yanlış yorumu yakalayamaz. Bu nedenle Qwen'in kayıt akışında serbest tıbbi yorum yazmasına izin verilmez: yalnız onaylı giriş anahtarı ve mevcut bulgu ID'leri seçer. Sunucu değişmeyen sayıları, ölçüm tarihini, kaynak durumunu ve kural seviyelerini render eder; işaretli/eski bulguları önceliklendirir. Önceki iki kayıt karşılaştırması sunucuda hesaplanır ve klinik trend sayılmaz. Model seçimi doğrulanamıyorsa açıkça model dışı kayıt/kural özeti gösterilir. Bu akış genel eğitim yanıtlarını veya acil uyarı önceliğini kaldırmaz.
+
 ## 2. Qwen3 1.7B kurulumu
 
 Mevcut MedGemma kurulumu aynı şekilde kalır. İkinci model için:

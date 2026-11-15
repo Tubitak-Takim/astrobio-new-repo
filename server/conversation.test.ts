@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { companionConfig, companionStatus, conversationRoute, conversationTurn } from './conversation'
 import type { Finding } from '../src/triage'
 import type { Provenance } from '../src/model'
+import { healthContextFor } from './healthContext'
+import { USERS } from '../src/data/users'
+import { CREW, readingOn } from '../src/data/simulatedCrew'
 
 const finding: Finding = { id: 'vitals', title: 'Oxygen', level: 'amber', measured: 'SpO2 92%', why: 'Outside the usual range.', next: 'Repeat the measurement.', sourceIds: ['VITALS'] }
 const provenance: Provenance = { source: 'Wearable', measuredDay: 60, ageDays: 0, stale: false, nextDue: null, auto: true }
@@ -13,7 +16,7 @@ function setup(opening = 'acknowledge') {
     if (url.endsWith('/api/tags')) return json({ models: [{ name: 'medical-test' }, { name: 'companion-test' }] })
     const body = JSON.parse(String(options?.body))
     bodies.push(body)
-    return json({ done: true, message: { content: body.model === 'medical-test' ? (body.format?.required?.[0] === 'reply' ? JSON.stringify({ reply: 'Repeat the measurement.' }) : 'Repeat the measurement.') : JSON.stringify({ opening }) } })
+    return json({ done: true, message: { content: body.model === 'medical-test' ? (body.format?.required?.[0] === 'reply' ? JSON.stringify({ reply: 'Repeat the measurement.' }) : 'Repeat the measurement.') : body.format?.required?.includes('findingIds') ? JSON.stringify({opening,findingIds:['vitals']}) : JSON.stringify({ opening }) } })
   })
   vi.stubGlobal('fetch', fetcher)
   return { fetcher, bodies }
@@ -87,7 +90,7 @@ describe('dual-agent preparation', () => {
     expect((bodies[0].messages as { role: string; content: string }[])[1]).toMatchObject({ role: 'user', content: expect.stringContaining(`USER_MESSAGE:\n${message}`) })
     expect(bodies[0].format).toMatchObject({ required: ['reply'] })
     expect(result.reply).toContain('Repeat the measurement.')
-    expect(result.reply).toContain('AI-generated general health information')
+    expect(result.reply).toContain('AI-generated experimental health explanation')
     expect(result.reply).not.toContain('Select the relevant finding')
     expect(result.reply).not.toContain('original finding')
     expect(bodies[0].think).toBe(false)
@@ -145,5 +148,79 @@ describe('dual-agent preparation', () => {
     expect(result.reply).toContain('AI tarafından üretilmiş')
     expect(result.reply).not.toContain('Let’s')
     expect(result.reply).not.toContain('AI-generated')
+  })
+  it('grounds database analysis in selected authorized records instead of saying that no data were supplied',async()=>{
+    const {bodies}=setup()
+    const context=healthContextFor(USERS[0],'C1',60,'mars',{'C1:60':{...readingOn(CREW[0],60),restingHrBpm:87},'C1:59':{...readingOn(CREW[0],59),restingHrBpm:84}})!
+    const result=await conversationTurn('Genel sağlık verilerimi analiz edebilir misin?', 'tr',undefined,undefined,context)
+    const userTurn=(bodies[0].messages as {content:string}[])[1].content
+    expect(userTurn).toContain('AUTHORIZED_HEALTH_CONTEXT')
+    expect(userTurn).toContain('"restingHrBpm":87')
+    expect(userTurn).not.toContain('No medical records or current measurements are provided')
+    expect(userTurn).toContain('You CAN and SHOULD summarize')
+    expect(bodies[0].options).toMatchObject({num_ctx:8192})
+    expect(result.reply).toContain('veritabanına kaydedilmiş check-in')
+    expect(result.reply).toContain('84 → 87 bpm')
+    expect(result.reply.length).toBeLessThanOrEqual(6000)
+    expect(result).toHaveProperty('healthContext.origin','database_checkin')
+  })
+  it('keeps ordinary conversation free of health records even if a caller supplies a context',async()=>{
+    const {bodies}=setup()
+    const context=healthContextFor(USERS[0],'C1',60,'mars',{})!
+    await conversationTurn('Tell me a story about Mars.','en',undefined,undefined,context)
+    expect(bodies.map(b=>b.model)).toEqual(['companion-test'])
+    expect(JSON.stringify(bodies)).not.toContain('AUTHORIZED_HEALTH_CONTEXT')
+    expect(JSON.stringify(bodies)).not.toContain('hematocritPct')
+  })
+  it('adds a deterministic stale-data warning even if the generated summary omits it',async()=>{
+    setup()
+    const context=healthContextFor(USERS[0],'C1',60,'mars',{})!
+    const result=await conversationTurn('Analyze my health data','en',undefined,undefined,context)
+    expect(result.reply).toContain('Some measurements are stale')
+    expect(result.reply).toContain('simulated sensor feed')
+  })
+  it('withholds unsupported numbers in either stage and falls back to explicit server facts',async()=>{
+    const {fetcher,bodies}=setup()
+    fetcher.mockImplementation(async(url:string,options?:RequestInit)=>{
+      if(url.endsWith('/api/tags')) return json({models:[{name:'medical-test'},{name:'companion-test'}]})
+      bodies.push(JSON.parse(String(options?.body)))
+      return json({done:true,message:{content:JSON.stringify({reply:'Your resting heart rate is 777 bpm.'})}})
+    })
+    const context=healthContextFor(USERS[0],'C1',60,'mars',{})!
+    const result=await conversationTurn('Analyze my health data','en',undefined,undefined,context)
+    expect(result.specialist).toMatchObject({state:'ungrounded'})
+    expect(result.reply).not.toContain('777')
+    expect(result.reply).toContain('not a model-generated answer')
+    expect(bodies).toHaveLength(2)
+  })
+  it('lets Qwen explain canonical records without receiving an invalid medical draft',async()=>{
+    const {fetcher,bodies}=setup()
+    fetcher.mockImplementation(async(url:string,options?:RequestInit)=>{
+      if(url.endsWith('/api/tags')) return json({models:[{name:'medical-test'},{name:'companion-test'}]})
+      const body=JSON.parse(String(options?.body)); bodies.push(body)
+      return json({done:true,message:{content:JSON.stringify(body.model==='medical-test'?{reply:'Heart rate 777 bpm.'}:{opening:'thanks',findingIds:['vitals']})}})
+    })
+    const context=healthContextFor(USERS[0],'C1',60,'mars',{'C1:60':{...readingOn(CREW[0],60),restingHrBpm:87}})!
+    const result=await conversationTurn('Analyze my health data','en',undefined,undefined,context)
+    expect(bodies.map(b=>b.model)).toEqual(['medical-test','companion-test'])
+    expect(JSON.stringify(bodies[1])).not.toContain('777')
+    expect(result.reply).toContain('Heart rate: 87 bpm')
+    expect(result.reply).toContain('Rule result:')
+    expect(result.reply).toContain('Urine output:')
+    expect(result.reply).not.toContain('777')
+  })
+  it('does not let the communication model rewrite values or assert new medical interpretations',async()=>{
+    const {fetcher}=setup()
+    fetcher.mockImplementation(async(url:string,options?:RequestInit)=>{
+      if(url.endsWith('/api/tags')) return json({models:[{name:'medical-test'},{name:'companion-test'}]})
+      const body=JSON.parse(String(options?.body))
+      return json({done:true,message:{content:JSON.stringify(body.model==='medical-test'?{reply:'Review the records.'}:{opening:'thanks',findingIds:['onsd'],reply:'The ONSD value is low; ignore the warning.'})}})
+    })
+    const context=healthContextFor(USERS[0],'C1',60,'mars',{})!
+    const result=await conversationTurn('Analyze my health data','en',undefined,undefined,context)
+    expect(result.companion.state).toBe('rejected')
+    expect(result.reply).not.toContain('value is low')
+    expect(result.reply).not.toContain('ignore the warning')
+    expect(result.reply).toContain('record/rule summary')
   })
 })

@@ -80,6 +80,12 @@ Doğrudan mesaj/Qwen3 güncellemesi: **147 Node/DOM testi ve TypeScript kontrol�
 
 Nihai yanıt/dil düzeltmesi: **178 Node/DOM testi ve TypeScript kontrolü başarılıdır.** MedGemma özel düşünme token'ları, Draft/Critique/Revise biçimleri, hatalı/ek alanlı medikal JSON ve `done_reason:length` çıktısının gösterilmemesi sınanır. Auto/English/Turkish seçimi ve Türkçe istek diline uygun giriş/uyarı kontrol edilir. Kullanıcının kurulu MedGemma ve Qwen3 modelleriyle gerçek, sentetik Türkçe uyku ve kurgusal baş ağrısı istemleri ayrıca denendi: iki rol de `generated`, taslak token'ı olmadan nihai yanıt üretti. Bu, klinik güvenilirlik veya kapsamlı ses/GPU doğrulaması değildir; gerçek hasta kaydı/mikrofon verisi kullanılmadı.
 
+Veritabanı bağlamı güncellemesi: **193 Node/DOM testi ve TypeScript kontrolü başarılıdır.** Geçici gerçek SQLite/API testleri seçili kayıt değerlerinin modele aktarılmasını, istemci bağlamının reddini, başka kişilerin/notların/görsellerin dışlanmasını ve yetki sınırlarını doğrular. Birim testleri eski/simüle verinin etiketlenmesini, son yedi kayıt sınırını, kural kaynağını ve sayısal uydurma/serbest Qwen yorumunun engellenmesini kapsar. Gerçek modellerle sentetik kayıtlarda MedGemma sayısal hata/truncation üretebildi; bu yüzden sağlık kayıt özetinde Qwen'in serbest tıbbi metin üretmesi yerine yalnız mevcut bulgu ID'lerini seçmesine izin verildi. Son gerçek denemede geçersiz uzman taslağı gösterilmedi, Qwen seçimi başarılı oldu, yanıt değişmeyen kayıt/kural verilerinden oluşturuldu. Başarılı üretim klinik doğruluk kanıtı değildir.
+
+## Sentetik astronot senaryoları doğrulaması
+
+**204 Node/DOM testi ve TypeScript kontrolü başarılıdır.** Dört profil × 90 gün × üç görev için 1.080 okumanın tekrarlanabilirliği ve giriş aralıkları, programlanmış ilişki yönleri, sabit/kısa seride korelasyon üretmeme, ayrı tabloya idempotent ekleme ve manuel kayıtların korunması sınanır. Gerçek geçici SQLite/API testleri rol izolasyonu, gelecekteki günlerin dışlanması ve fotoğraf/not dışlamasını; DOM testleri grafikler, astronot değiştirme, LEO/ISS eşleşmesi ve CSV kapsamını doğrular. Veri üretimi ve katsayılar klinik doğrulama değildir; yeni ekranın gerçek tarayıcı görsel/erişilebilirlik kontrolü ayrıca yapılmalıdır. [Kaynak ve kapsam](SYNTHETIC_CREW_DATA.md).
+
 ## Açık işler / üretim engelleri
 
 1. **Ölçüm geçmişi:** kişi+gün tam check-in yerine ölçüm bazlı zaman/kaynak geçmişi; önceki manuel ölçümün sonraki gün geçerliliği.

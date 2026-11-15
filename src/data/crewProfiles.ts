@@ -1,0 +1,9 @@
+// Fictional scenario parameters. Sources support broad research themes, NOT
+// these coefficients, individual predictions or causal effect estimates.
+export const SYNTHETIC_VERSION = 'crew-scenarios-v1'
+export const CREW_PROFILES: Record<string, {title:string;description:string;heart:number;sleep:number;mood:number;urine:number;temperature:number;systolic:number;glucose:number;phase:number;sourceIds:string[]}> = {
+  C1:{title:'Command workload and hydration',description:'Higher command workload, missed hydration breaks and a personal eye-ultrasound baseline. Sleep, resting heart rate and urine output share programmed workload/hydration drivers.',heart:64,sleep:7.4,mood:4.1,urine:2.5,temperature:36.6,systolic:112,glucose:88,phase:1,sourceIds:['HCT_FLIGHT','URINE_TARGET','SLEEP']},
+  C2:{title:'Caregiving workload and late-mission fatigue',description:'A relatively stable early mission, followed by reduced sleep and mood during the late workload phase. These are fictional coupled changes, not a diagnosis.',heart:59,sleep:7.7,mood:4.2,urine:2.6,temperature:36.7,systolic:116,glucose:92,phase:4,sourceIds:['SLEEP','MOOD','EXERCISE_PLAN']},
+  C3:{title:'Cabin environment and sleep sensitivity',description:'A programmed CO₂-sensitive scenario: later cabin changes coincide with headaches, shorter sleep and fewer exercise sessions. Normal oxygen saturation is retained; this is not a CO₂-to-SpO₂ conversion.',heart:67,sleep:7.2,mood:3.9,urine:2.3,temperature:36.5,systolic:108,glucose:90,phase:8,sourceIds:['CO2_HEADACHE','SLEEP','EXERCISE_PLAN']},
+  C4:{title:'Engineering workload and energy balance',description:'An initially fit engineer with later energy deficit, lower exercise participation and body-mass loss. The existing neck-vein scenario remains distinct from those associations.',heart:56,sleep:7.3,mood:4.0,urine:2.7,temperature:36.8,systolic:120,glucose:96,phase:12,sourceIds:['EXERCISE_PLAN','MASS','VITD_FLIGHT']},
+}

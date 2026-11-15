@@ -20,6 +20,7 @@
         ${link('gorev-sagligi','mission-health','Mission Health','mdi:orbit')}
         ${link('gunluk-etkiler','insights','Daily Insights','mdi:chart-box-outline')}
         <div class="nav-divider" aria-hidden="true"></div><span class="nav-group-label">SCIENTIFIC ANALYSIS</span>
+        ${link('crew-data','crew-data','Crew Data','mdi:account-group-outline')}
         ${link('olcumler','measurements','Measurements','mdi:chart-line')}
         ${link('bis-analizi','bis','BIS Analysis','mdi:waveform')}
         ${link('ridge','ridge','RIDGE','mdi:shield-outline')}

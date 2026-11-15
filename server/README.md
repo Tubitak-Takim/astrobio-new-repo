@@ -1,5 +1,7 @@
 # Astrobio backend
 
+Sentetik astronot veri seti: başlangıçta `ensureCrewDataset` ayrı ve sürümlü `synthetic_crew_readings` tablosuna 4 kişi × 90 gün × 3 görev için 1.080 snapshot ekler. `INSERT OR IGNORE` mevcut veriyi değiştirmez; manuel check-in'ler yalnız ilgili gün için önceliklidir. Korumalı `/api/crew-data` uç noktası rol filtresi, ölçüm günleri ve hesaplanan korelasyonlarla yeni Crew Data ekranını besler. [Veri kaynağı ve sınırlar](../docs/SYNTHETIC_CREW_DATA.md).
+
 Sorumlu: **Muhammet Kerim Şahin**. Node 24+ HTTP sunucusu ve yerleşik SQLite kullanılır. Node üretim çalışma zamanı npm bağımlılığı yoktur. `server/static.ts`, `frontend/` arayüzünü aynı origin'de sunar; `/` HTML, `/api/*` mevcut API sözleşmesidir. Public frontend dışındaki proje dosyaları sunulmaz.
 
 ## Çalıştırma

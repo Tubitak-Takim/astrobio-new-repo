@@ -1,6 +1,5 @@
-// Mission settings. Switching the setting changes two things only: how long a message
-// takes to reach Earth, and how fast radiation dose builds up. The simulated crew readings
-// are the same in every setting.
+// Mission settings control signal delay, radiation accumulation and the demo
+// fluid-shift contribution. Fictional workload/sleep drivers remain reproducible.
 
 import { delayMinutes } from './users.ts'
 

@@ -4,6 +4,8 @@ Sorumlu: **Muhammet Kerim Şahin**. Frontend: **Elif Nur Özek**. Entegrasyon do
 
 Base URL geliştirmede `/api` proxy'si veya `http://127.0.0.1:8787/api`. JSON kullanılır. Giriş dışındaki korumalı çağrılarda `Authorization: Bearer <token>` gönderin. Hatalar `{ "error": "..." }` döner.
 
+`/crew-data` yanıtı `version`, `mission`, `day`, `fromDay`, `simulated:true`, rol filtreli `crew` ve `limitations` alanlarını içerir. Her kişi için kurmaca profil, kaynak durumları, `series[{day,origin,reading,cabin,measurementDays}]` ve hesaplanan `relationships[{id,label,r,n,manualPoints,sourceIds,note}]` döner. `origin` sentetik snapshot veya o güne ait manuel kayıt olarak ayrılır; görüntü/notlar aktarılmaz. `r:null` yetersiz/değişmeyen seri demektir; nedensellik veya klinik risk değildir. [Üretim ve kaynak ayrıntıları](SYNTHETIC_CREW_DATA.md).
+
 ## Uç noktalar
 
 | Metot | Yol | Yetki / açıklama |
@@ -13,6 +15,7 @@ Base URL geliştirmede `/api` proxy'si veya `http://127.0.0.1:8787/api`. JSON ku
 | POST | `/login` | `{userId,pin}` → `{token,user}`; oturum 12 saat |
 | POST | `/logout` | Mevcut oturumu siler |
 | GET | `/state` | Kullanıcının görebileceği kayıtlar |
+| GET | `/crew-data?day=90&mission=mars&window=90` | Sentetik astronot serileri, ölçüm günleri ve hesaplanan ilişkiler; mürettebat kendisi, CMO dört kişi, Dünya 403 |
 | GET | `/assessment?day=60&mission=mars&mode=space` | Mürettebat kendi değerlendirmesi + kabin; CMO tüm ekip; Dünya 403 |
 | PUT | `/checkins/:crewId/:day` | Mürettebat kendisi; CMO herkes için tam `CrewReading` |
 | DELETE | `/checkins` | Yalnız CMO; bütün manuel check-in'leri kaldırır |
@@ -106,6 +109,10 @@ Yanıt: `{state,original:{finding,provenance,sources},generated:string|null,expe
 Güncel frontend arayüzü İngilizce kalır, ancak sohbet için Auto/English/Turkish seçimi sunar. Auto mesaj dilini basit bir sezgiselle belirleyip `language:"tr"` veya `"en"` gönderir; API `auto` değeri kabul etmez. Kayıt dilini kesinleştirmek için kullanıcı English/Turkish seçebilir. Bu dil seçimi önceki sohbet içeriğinin sunucuya gönderildiği anlamına gelmez.
 
 Yanıt: `{route,reply,specialist,companion,original?,experimental:true,replyId,replyExpiresInSeconds:120,persisted:false}`. `route` urgent/medical/social olabilir; social artık genel sohbeti de içerir. Seçili bulgu varsa kanonik sağlık metni korunur. Bulgu olmadan sağlık sorulursa doğrudan MedGemma'nın genel eğitim yanıtı ve açık deneysel uyarı gösterilir; Qwen3 yalnız empatik giriş seçebilir. Genel sohbette Qwen3 serbest metin üretir. `/voice/speak` son `reply` metnini okur. Model eksik/kapalı/hatalıysa bunun model yanıtı olmadığı açıkça belirtilir. Sohbet stateless'tir; önceki mesajlar veya sağlık kayıtları serbest soruya otomatik eklenmez. Yanıt doğruluğu prompt kurallarıyla garanti edilemez.
+
+**Veritabanı özeti istendiğinde:** “Genel sağlık verilerimi analiz et”, “Analyze my health records” gibi istekler seçili yetkili kişi/gün için sunucu üretimli bağlam alır. Önceki paragraftaki kayıtsız genel eğitim akışından farklı olarak yalnız bu istekte ölçümler, baz çizgi, kural sonuçları, kaynak/güncellik ve en fazla yedi önceki kaydın sınırlı özeti aktarılır. İstemcinin gönderdiği `healthContext` dikkate alınmaz. Başka kişiler, isimler, notlar, mesajlar ve görseller aktarılmaz. `healthContext:{subjectId,day,mission,origin,previousSavedReadings,staleFindingIds}` yanıt meta verisi kaynağı açıklar; origin `database_checkin` veya `simulated_feed` olabilir. Bu, SQL erişimi veren bir model aracı değildir.
+
+Bu kayıt akışında Qwen yalnız `opening` ve mevcut bulgu ID'lerinden oluşan `findingIds` seçebilir; serbest tıbbi yorum/metin, ek alan veya uydurma bulgu kabul edilmez. Sayılar, kural seviyeleri, ölçüm yaşları ve kaynak etiketleri sunucuda üretilir; işaretli/eski bulgular gizlenemez. MedGemma çıktısı tamamlanmamış veya kayıtlarda bulunmayan sayılar içeriyorsa Qwen'e verilmez. MedGemma başarısız olsa da Qwen yetkili kural/veri paketinden seçim yapabilir. Seçim de başarısızsa model cevabı olmadığı açıkça belirtilen kanonik kayıt/kural özeti döner. Genel sohbet ve yalnız eğitim sorularında kayıt aktarımı yapılmaz. Sayısal kontrol ve kural motoru klinik doğruluk garantisi değildir.
 
 MedGemma serbest sağlık yanıtında yalnız `{reply:string}` JSON'u kabul edilir. Özel düşünme token'ları (`<unused94>` vb.), tanınan taslak/eleştiri başlıkları, ek JSON alanları ve `done_reason:"length"` çıktısı kullanıcıya iletilmez; bu durumda `rejected`/`truncated` servis bildirimi döner. Geçersiz taslaktan bir bölüm seçilmez ve taslak Qwen/TTS'ye gönderilmez. Bu çıktı kontrolü tıbbi doğruluk garantisi değildir.
 

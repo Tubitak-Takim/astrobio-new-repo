@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { crewFixture } from './crew-data.fixture.js';
 
 let requests, fetchMock, adapter;
 const user = {id:'C1',name:'Test Crew',role:'crew',title:'Commander'};
@@ -19,7 +20,7 @@ beforeEach(()=>{
   window.confirm=vi.fn(()=>true);
   fetchMock=vi.fn(async (path,options={})=>{
     requests.push({path,options});
-    let data = path==='/api/users'?{users:[user]}:path==='/api/login'?{token:'test-token',user}:path==='/api/state'?state:path.startsWith('/api/assessment')?assessment:path==='/api/chat'?{reply:'Canonical AI reply',replyId:'receipt'}:{ok:true};
+    let data = path==='/api/users'?{users:[user]}:path==='/api/login'?{token:'test-token',user}:path==='/api/state'?state:path.startsWith('/api/assessment')?assessment:path.startsWith('/api/crew-data')?crewFixture:path==='/api/chat'?{reply:'Canonical AI reply',replyId:'receipt'}:{ok:true};
     return {ok:true,status:200,json:async()=>data};
   });
   vi.stubGlobal('fetch',fetchMock);
@@ -149,5 +150,32 @@ describe('frontend API adapter',()=>{
     document.querySelector('#backend-voice-consent').checked=true;
     document.querySelector('[data-backend=record]').click();
     await vi.waitFor(()=>expect(transcribe).toHaveBeenCalledWith(expect.any(Blob),'tr'));
+  });
+  it('renders individualized data charts and associations without a backend connection panel',async()=>{
+    await boot('crew-data',true);
+    expect(document.querySelector('#crew-data-workspace')).not.toBeNull();
+    expect(document.querySelector('#backend-panel')).toBeNull();
+    expect(document.body.textContent).toContain('Hydration profile');
+    expect(document.querySelectorAll('.crew-chart')).toHaveLength(7);
+    expect(document.body.textContent).toContain('r = -0.800');
+    expect(document.body.textContent).toContain('N/A');
+    expect(document.body.textContent).toContain('not a causal effect');
+  });
+  it('changes the visible astronaut when the medical officer selects another authorized profile',async()=>{
+    const original=fetchMock.getMockImplementation();
+    fetchMock.mockImplementation(async(path,options)=>path==='/api/state'?{ok:true,json:async()=>({...state,user:{...user,id:'C2',role:'cmo'}})}:path.startsWith('/api/assessment')?{ok:true,json:async()=>({...assessment,subjects:[...subjects,{...subjects[0],id:'C2',name:'Test Officer'}]})}:original(path,options));
+    await boot('crew-data',true);
+    expect(document.body.textContent).toContain('Fatigue profile');
+    const select=document.querySelector('#backend-subject');select.value='C1';select.dispatchEvent(new Event('change',{bubbles:true}));
+    expect(document.body.textContent).toContain('Hydration profile');
+    expect(document.body.textContent).not.toContain('Fatigue profile');
+  });
+  it('maps the LEO design alias to the ISS backend mission',async()=>{
+    localStorage.setItem('astrobio-mode','leo');
+    await boot('health',true);
+    // The test shell includes a Mars toggle; remove it and refresh to use the stored selection.
+    document.querySelector('.delay-option').remove();
+    document.querySelector('[data-backend=refresh]').click();
+    await vi.waitFor(()=>expect(requests.some(r=>r.path.includes('/api/assessment?')&&r.path.includes('mission=iss'))).toBe(true));
   });
 });

@@ -171,14 +171,20 @@
     $$('[data-region]',c).forEach(n=>n.addEventListener('click',()=>chooseRegion(n.dataset.region)));
   }
   const connectedPage = (title,sub) => `${label(title,sub)}<p class="backend-info">Preparing the server connection. If the sign-in form does not appear, check your connection and reload. No offline demo responses are generated here.</p>`;
-  const routes={'index.html':'overview','ask-to-ai.html':'ai','personel-info.html':'personal','health-check.html':'health','olcumler.html':'measurements','bis-analizi.html':'bis','ridge.html':'ridge','raporlar.html':'reports','takvim.html':'calendar','uyku.html':'sleep','toparlanma.html':'recovery','gunluk-yuk.html':'load','gorev-sagligi.html':'mission-health','gunluk-etkiler.html':'insights'};
-  const pages={overview,measurements,bis:bisPage,ridge:ridgePage,reports:()=>connectedPage('Ground Team Reports','REPORTS AND MESSAGES'),personal:()=>connectedPage('Personnel Info','CREW INFORMATION'),ai:()=>connectedPage('Ask to AI','LOCAL MISSION ASSISTANT'),calendar,health,sleep:sleepPage,recovery:recoveryPage,load:loadPage,'mission-health':missionHealthPage,insights:insightsPage};
+  const routes={'index.html':'overview','ask-to-ai.html':'ai','personel-info.html':'personal','health-check.html':'health','crew-data.html':'crew-data','olcumler.html':'measurements','bis-analizi.html':'bis','ridge.html':'ridge','raporlar.html':'reports','takvim.html':'calendar','uyku.html':'sleep','toparlanma.html':'recovery','gunluk-yuk.html':'load','gorev-sagligi.html':'mission-health','gunluk-etkiler.html':'insights'};
+  const pages={overview,measurements,bis:bisPage,ridge:ridgePage,'crew-data':()=>connectedPage('Crew Data','NASA-INSPIRED SYNTHETIC SCENARIOS'),reports:()=>connectedPage('Ground Team Reports','REPORTS AND MESSAGES'),personal:()=>connectedPage('Personnel Info','CREW INFORMATION'),ai:()=>connectedPage('Ask to AI','LOCAL MISSION ASSISTANT'),calendar,health,sleep:sleepPage,recovery:recoveryPage,load:loadPage,'mission-health':missionHealthPage,insights:insightsPage};
   function render() {
     window.ASTROBIO_ANATOMY?.destroy?.();
     const file=(location.pathname.split('/').pop() || 'index.html').toLowerCase(), hash=location.hash.slice(1).split('?')[0];
     S.route=Object.hasOwn(pages,hash)?hash:(routes[file] || document.body.dataset.startRoute || 'overview');
     $$('.nav-link').forEach(a=>{a.classList.toggle('active',a.dataset.route===S.route);if(a.dataset.route===S.route)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
     $('#main').innerHTML=`<div class="page">${pages[S.route]()}</div>`; $('#main').setAttribute('aria-label',S.route); updateSidebar();
+    if(S.route==='overview') {
+      const entry=document.createElement('section');entry.className='card card-padding crew-entry';
+      entry.innerHTML='<div><h2>Individual astronaut datasets</h2><p>Explore authorized 90-day profiles, time series and computed associations in Crew Data. The design examples below remain separate.</p></div><a class="btn primary" href="crew-data.html">Open Crew Data</a>';
+      $('#main .page').prepend(entry);
+    }
+    if(['sleep','recovery','load','mission-health','insights','measurements','bis','ridge'].includes(S.route)) $('#main .section-top')?.insertAdjacentHTML('beforeend','<a class="text-link" href="crew-data.html">View individual crew records →</a>');
     if(S.route==='calendar') $('#calendar-note').value=readNotes()[toDate(S.selectedDate)] || '';
     if(S.route==='health') import('./anatomy.js').then(mod=>{if(S.route==='health')return mod.mount({onRegion:chooseRegion});}).catch(error=>{console.warn('Unable to load the 3D viewer:',error);showFallback();});
     window.scrollTo({top:0,behavior:'instant'});
@@ -226,6 +232,7 @@
     if(['cole-r0','cole-alpha'].includes(event.target.id)) {const r=Number($('#cole-r0').value),a=Number($('#cole-alpha').value);$('#cole-r0-val').textContent=r;$('#cole-alpha-val').textContent=fmt(a,2);$('#cole-plot').innerHTML=colePlot(r,a);}
   }
   function init() {
+    window.ASTROBIO_DESIGN={setMission(value){if(!Object.hasOwn(D.missionModes,value))return;S.mode=value;localStorage.setItem('astrobio-mode',value);render();}};
     document.addEventListener('click',handleClick);document.addEventListener('change',change);document.addEventListener('input',event=>{if(event.target.id.startsWith('cole-'))change(event);});
     document.addEventListener('submit',event=>{if(event.target.id!=='calendar-form')return;event.preventDefault();const notes=readNotes();notes[toDate(S.selectedDate)]=$('#calendar-note').value.slice(0,500);try{setNotes(notes);toast('Note saved in this browser.');render();}catch{toast('Unable to save the local note. Browser storage may be unavailable.');}});
     window.addEventListener('hashchange',render);$('#top-clock').textContent=new Intl.DateTimeFormat('en-US',{dateStyle:'medium'}).format(new Date());render();

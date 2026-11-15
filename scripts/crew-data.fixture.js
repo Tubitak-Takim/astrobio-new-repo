@@ -1,0 +1,4 @@
+export const crewFixture = {
+  version:'fixture-v1',mission:'mars',fromDay:53,day:60,simulated:true,limitations:'Synthetic fixture, not NASA records.',
+  crew:['C1','C2'].map((id,index)=>({id,name:index?'Test Officer':'Test Crew',role:index?'Medical officer':'Commander',profile:{title:index?'Fatigue profile':'Hydration profile',description:'Fictional example.',sources:[]},series:Array.from({length:8},(_,i)=>({day:53+i,origin:'synthetic_dataset',reading:{sleepHours7d:7-i*.1,restingHrBpm:(index?60:80)+i,moodAvg7d:4-i*.1,bodyMassKg:70-i*.1,urineLitersDay:2.2,spo2Pct:97,bodyTempC:36.7,vitaminDNgMl:32,hematocritPct:45,headache:false},cabin:{co2MmHg:2.8+i*.01,cumulativeDoseMSv:100+i}})),relationships:[{id:'sleep-heart',label:'Sleep ↔ resting heart rate',r:-.8,n:8,manualPoints:0,note:'Programmed example, not causation.',sourceIds:['SLEEP']},{id:'co2-headache',label:'CO₂ ↔ headache',r:null,n:8,manualPoints:0,note:'Constant example.',sourceIds:['CO2_HEADACHE']}]})),
+};

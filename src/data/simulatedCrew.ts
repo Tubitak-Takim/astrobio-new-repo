@@ -12,6 +12,7 @@
 
 import type { CabinReading, CrewBaseline, CrewReading, IjvFlow } from '../triage.ts'
 import { MISSIONS, type MissionId } from './missions.ts'
+import { CREW_PROFILES } from './crewProfiles.ts'
 
 export const MISSION_DAYS = 90
 
@@ -55,7 +56,12 @@ export function readingOn(crew: CrewMember, day: number, mission: MissionId = 'm
   const shift = MISSIONS[mission].fluidShift
   const n = (k: number) => noise(day * 7 + k + crew.id.charCodeAt(1) * 31)
   const b = crew.baseline
+  const profile = CREW_PROFILES[crew.id] ?? CREW_PROFILES.C1
   const cabin = cabinOn(day)
+  // Shared latent drivers produce coherent within-person patterns instead of
+  // independent random columns. Every coefficient here is a DEMO parameter.
+  const workload = 0.55 + Math.sin((day + profile.phase) / 5) * 0.22 + Math.sin((day + profile.phase) / 17) * 0.12
+  const lateFatigue = crew.id === 'C2' ? Math.max(0,day-55)/35 : 0
 
   // Hematocrit rises about 11% over the first 10 days, then stays there.
   const hematocritPct = b.hematocritPct * (1 + 0.11 * shift * Math.min(1, day / 10)) + n(1) * 0.3
@@ -64,10 +70,10 @@ export function readingOn(crew: CrewMember, day: number, mission: MissionId = 'm
   let visionChange = false
   let ijvFlow: IjvFlow = 'forward'
   let headache = false
-  let sleepHours7d = 6.8 + n(3) * 0.3
-  let urineLitersDay = 2.4 + n(6) * 0.2
+  let sleepHours7d = profile.sleep - workload * 0.75 - lateFatigue * 0.8 + n(3) * 0.08
+  let urineLitersDay = profile.urine - workload * 0.2 + n(6) * 0.08
   let resistanceSessions7d = 6
-  let moodAvg7d = 3.9 + n(7) * 0.3
+  let moodAvg7d: number
 
   // White cells rise in flight (published direction). Lymphocytes stay about the same.
   const wbcK = b.wbcK * (1 + 0.2 * Math.min(1, day / 10)) + n(12) * 0.1
@@ -87,13 +93,19 @@ export function readingOn(crew: CrewMember, day: number, mission: MissionId = 'm
   }
   if (crew.id === 'C3' && cabin.co2MmHg >= 2.9) {
     headache = true
-    sleepHours7d = 5.5 + n(3) * 0.2
+    sleepHours7d = 5.7 - workload * 0.35 + n(3) * 0.08
     // Feeling unwell, so skipping workouts.
     resistanceSessions7d = 3
   }
   if (crew.id === 'C4' && day >= 48) ijvFlow = 'stagnant'
+  if (crew.id === 'C4' && day >= 40) resistanceSessions7d = 4
+  // Recompute coupled mood after the environment-specific sleep adjustment.
+  moodAvg7d = profile.mood - (profile.sleep-sleepHours7d) * 0.45 + n(7) * 0.08
   // The medical officer carries everyone else's worries late in the mission.
-  if (crew.id === 'C2' && day >= 68) moodAvg7d = 2.3 + n(7) * 0.1
+  if (crew.id === 'C2' && day >= 68) { moodAvg7d = 2.4 - lateFatigue * 0.2 + n(7) * 0.08; resistanceSessions7d = 4 }
+  const sleepDebt = Math.max(0,profile.sleep-sleepHours7d)
+  const hydrationGap = Math.max(0,profile.urine-urineLitersDay)
+  const restingHrBpm = profile.heart + sleepDebt * 4 + hydrationGap * 2 + workload * 2 + n(5) * 0.7
 
   return {
     hematocritPct: Math.round(hematocritPct * 10) / 10,
@@ -104,14 +116,14 @@ export function readingOn(crew: CrewMember, day: number, mission: MissionId = 'm
     headache,
     sleepHours7d: Math.round(sleepHours7d * 10) / 10,
     spo2Pct: Math.round(97 + n(4)),
-    restingHrBpm: Math.round(62 + n(5) * 4),
+    restingHrBpm: Math.round(restingHrBpm),
     urineLitersDay: Math.round(urineLitersDay * 10) / 10,
     resistanceSessions7d,
     moodAvg7d: Math.round(moodAvg7d * 10) / 10,
-    bodyTempC: Math.round((36.7 + n(8) * 0.2) * 10) / 10,
-    systolicBp: Math.round(116 + n(9) * 5),
-    diastolicBp: Math.round(74 + n(10) * 4),
-    glucoseMgDl: Math.round(92 + n(11) * 6),
+    bodyTempC: Math.round((profile.temperature + n(8) * 0.1) * 10) / 10,
+    systolicBp: Math.round(profile.systolic + (restingHrBpm-profile.heart) * 0.6 + n(9) * 2),
+    diastolicBp: Math.round(70 + (restingHrBpm-profile.heart) * 0.35 + n(10) * 2),
+    glucoseMgDl: Math.round(profile.glucose + sleepDebt * 2 + workload * 4 + n(11) * 2),
     wbcK: Math.round(wbcK * 10) / 10,
     lymphK: Math.round(lymphK * 10) / 10,
     vitaminDNgMl: Math.round(vitaminDNgMl * 10) / 10,

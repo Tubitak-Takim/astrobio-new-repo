@@ -36,6 +36,8 @@ import { explainLocally, localAiStatus } from './localAi.ts'
 import { companionStatus, conversationTurn, conversationRoute } from './conversation.ts'
 import { MAX_VOICE_BYTES, ReplyReceipts, synthesizeVoice, transcribeVoice, voiceStatus } from './voice.ts'
 import { serveFrontend } from './static.ts'
+import { healthContextFor, requestsHealthRecords } from './healthContext.ts'
+import { crewDatasetFor, ensureCrewDataset } from './crewDataset.ts'
 
 const PORT = Number(process.env.API_PORT ?? 8787)
 const dbFile = process.env.DB_FILE ?? 'data/crew-health.sqlite'
@@ -56,6 +58,7 @@ for (const [table, column, type] of [['checkins', 'by_user', 'TEXT'], ['events',
   if (!columns.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`)
 }
 const sessionLifetimeMs = 12 * 60 * 60 * 1000
+ensureCrewDataset(db)
 const allowLogin = rateLimiter(10, 60_000)
 const allowLocalAi = rateLimiter(6, 60_000)
 const allowChat = rateLimiter(6, 60_000)
@@ -186,6 +189,15 @@ const server = createServer(async (req, res) => {
 
     if (method === 'GET' && path === '/api/state') return send(res, 200, stateFor(user))
 
+    if (method === 'GET' && path === '/api/crew-data') {
+      if(user.role==='surgeon') return send(res,403,{error:'Earth can only read delivered reports, not onboard crew time series.'})
+      const day=Number(url.searchParams.get('day') ?? 60)
+      const mission=url.searchParams.get('mission') ?? 'mars'
+      const window=Number(url.searchParams.get('window') ?? 90)
+      if(!validDay(day)||!isMission(mission)||!Number.isInteger(window)||window<1||window>MISSION_DAYS) return send(res,400,{error:'Invalid dataset day, mission or window.'})
+      return send(res,200,crewDatasetFor(db,user,day,mission,window,allCheckIns()))
+    }
+
     if (method === 'GET' && path === '/api/ai/status') return send(res, 200, await localAiStatus())
 
     if (method === 'GET' && path === '/api/ai/pipeline/status') {
@@ -204,7 +216,8 @@ const server = createServer(async (req, res) => {
       if (body.inputOrigin === 'voice' && body.transcriptConfirmed !== true) return send(res, 400, { error: 'Confirm the transcript before sending it to chat.' })
       if (!message || !validDay(day) || !isMission(mission) || (language !== 'tr' && language !== 'en') || typeof crewId !== 'string' || (body.findingId !== undefined && typeof body.findingId !== 'string') || (body.inputOrigin !== undefined && body.inputOrigin !== 'text' && body.inputOrigin !== 'voice')) return send(res, 400, { error: 'Invalid chat message or context.' })
       if (crewId !== 'cabin' && !canSee(user, crewId)) return send(res, 403, { error: 'You may only chat about authorized findings.' })
-      const subject = assessmentFor(user, day, allCheckIns(), mission, 'space').subjects.find((s) => s.id === crewId)
+      const checkIns = allCheckIns()
+      const subject = assessmentFor(user, day, checkIns, mission, 'space').subjects.find((s) => s.id === crewId)
       if (!subject) return send(res, 404, { error: 'Subject not found.' })
       const requested = body.findingId === undefined ? undefined : subject.space.find((f) => f.id === body.findingId)
       if (body.findingId !== undefined && !requested) return send(res, 404, { error: 'Finding not found.' })
@@ -212,7 +225,8 @@ const server = createServer(async (req, res) => {
       const urgentFinding = subject.space.find((f) => f.level === 'red')
       if (!urgentFinding && conversationRoute(message, false) !== 'urgent' && !allowChat(user.id)) return send(res, 429, { error: 'Too many chat requests.' })
       const finding = urgentFinding ?? requested
-      const result = await conversationTurn(message, language as 'tr' | 'en', finding, finding ? subject.info[finding.id] : undefined)
+      const context = !finding && requestsHealthRecords(message) ? healthContextFor(user, crewId, day, mission, checkIns) : undefined
+      const result = await conversationTurn(message, language as 'tr' | 'en', finding, finding ? subject.info[finding.id] : undefined, context ?? undefined)
       const replyId = replyReceipts.issue(user.id, result.reply)
       return send(res, 200, { ...result, replyId, replyExpiresInSeconds: 120, persisted: false })
     }

@@ -1,6 +1,7 @@
 // Same-origin adapter. Health rules and authorization remain on the Node server.
 import { AstrobioVoiceClient } from '/clients/voice-client.js';
 import { replyLanguage } from './chat-language.js';
+import { renderCrewData, crewCsv } from './crew-data.js';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const $ = (s) => document.querySelector(s);
@@ -9,6 +10,7 @@ let users = [], state = null, assessment = null, pipeline = null, subjectId = ''
 let generation = 0, voice = null, chat = [], busy = false, transcript = false;
 let activeMission = '', loading = true, failure = '';
 let languageMode = 'auto', detectedLanguage = 'en';
+let crewDataset = null, relationshipId = 'sleep-heart';
 const listeners = new AbortController();
 const numeric = {
   hematocritPct:'Hematocrit (%)', onsdMm:'ONSD (mm)', sleepHours7d:'7-day sleep average (hours)',
@@ -19,7 +21,7 @@ const numeric = {
   vitaminDNgMl:'Vitamin D (ng/mL)', bodyMassKg:'Body mass (kg)',
 };
 const booleans = {visionChange:'Vision change', ijvClotSeen:'IJV clot seen', headache:'Headache'};
-const mission = () => $('.delay-option.active')?.dataset.mode || localStorage.getItem('astrobio-mode') || 'mars';
+const mission = () => {const value=$('.delay-option.active')?.dataset.mode || localStorage.getItem('astrobio-mode') || 'mars';return value==='leo'?'iss':value;};
 const route = () => $('.nav-link.active')?.dataset.route || 'overview';
 const language = () => languageMode === 'auto' ? detectedLanguage : languageMode;
 const context = () => ({day, mission: mission(), crewId: subjectId, language:language()});
@@ -27,7 +29,7 @@ const message = (text) => { const el = $('#backend-error'); if (el) el.textConte
 
 function clearSession() {
   token = ''; sessionStorage.removeItem('astrobio-session');
-  state = assessment = pipeline = null; subjectId = ''; resetChat();
+  state = assessment = pipeline = crewDataset = null; subjectId = ''; resetChat();
 }
 function resetChat() {
   voice?.revokeConsent(); voice = null; chat = []; busy = false; transcript = false;
@@ -54,15 +56,16 @@ async function refresh() {
   try {
     const nextState = await api('/api/state');
     const nextAssessment = nextState.user.role === 'surgeon' ? null : await api(`/api/assessment?day=${day}&mission=${selectedMission}&mode=space`);
+    const nextDataset = route()==='crew-data' && nextState.user.role!=='surgeon' ? await api(`/api/crew-data?day=${day}&mission=${selectedMission}&window=90`) : null;
     if (current !== generation) return;
-    state = nextState; assessment = nextAssessment;
-    const subjects = assessment?.subjects || [];
+    state = nextState; assessment = nextAssessment; crewDataset=nextDataset;
+    const subjects = (assessment?.subjects || []).filter(s=>route()!=='crew-data'||s.id!=='cabin');
     if (!subjects.some(s => s.id === subjectId)) subjectId = subjects.find(s => s.id === state.user.id)?.id || subjects[0]?.id || '';
     activeMission = selectedMission;
   } catch (error) {
     if (current !== generation) return;
     // Never show a previous context's medical results after a failed refresh.
-    state = assessment = null; failure = error.message;
+    state = assessment = crewDataset = null; failure = error.message;
   }
   if (current === generation) { loading = false; draw(); }
 }
@@ -72,10 +75,10 @@ function mount() {
   if (!page) return;
   // Design pages stay compact: no connection panel, sign-in form or health
   // requests. The full authenticated health panel belongs only to Health Check.
-  if (!['health','ai','reports','personal','calendar'].includes(route())) return;
-  if (['ai','reports','personal'].includes(route())) page.replaceChildren();
+  if (!['health','ai','reports','personal','calendar','crew-data'].includes(route())) return;
+  if (['ai','reports','personal','crew-data'].includes(route())) page.replaceChildren();
   const host = document.createElement('section');
-  host.id = route()==='health' ? 'backend-panel' : 'backend-workspace';
+  host.id = route()==='health' ? 'backend-panel' : route()==='crew-data'?'crew-data-workspace':'backend-workspace';
   host.className = route()==='health' ? 'backend-panel' : 'account-workspace card card-padding';
   page.prepend(host);
   if (route()==='health') {
@@ -86,8 +89,8 @@ function mount() {
   if (token) refresh(); else { loading = false; draw(); }
 }
 function draw() {
-  const host = $('#backend-panel') || $('#backend-workspace'); if (!host) return;
-  const title = {health:'Mission Health System',ai:'Local AI and Voice Chat',reports:'Ground Team Reports',personal:'Personnel Info',calendar:'Mission-day Notes'}[route()];
+  const host = $('#backend-panel') || $('#backend-workspace') || $('#crew-data-workspace'); if (!host) return;
+  const title = {health:'Mission Health System',ai:'Local AI and Voice Chat',reports:'Ground Team Reports',personal:'Personnel Info',calendar:'Mission-day Notes','crew-data':'Crew Data Explorer'}[route()];
   host.innerHTML = `${route()==='health'?'<div class="eyebrow">ASTROBIO · AUTHORIZED BACKEND CONNECTION</div>':''}<h1>${title}</h1><p class="backend-info">Simulation prototype · Not a medical device. The server filters data according to your role.</p><p id="backend-error" class="backend-error" role="alert">${esc(failure)}</p>`;
   if (!token) {
     host.insertAdjacentHTML('beforeend', `<form id="backend-login" class="backend-toolbar"><label>User<select class="field" name="userId" required>${users.map(u=>`<option value="${esc(u.id)}">${esc(u.name)} · ${esc(u.title)}</option>`).join('')}</select></label><label>Demo PIN<input class="field" name="pin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="63" required></label><button class="btn primary" ${users.length?'':'disabled'}>Sign in</button></form><p class="backend-info">Demo PIN: 2026. Chat and health data are not saved permanently in the browser; the session token stays in this tab.</p>`);
@@ -97,7 +100,9 @@ function draw() {
   if (loading) { host.insertAdjacentHTML('beforeend','<p role="status">Loading server data…</p>'); return; }
   if (!state) return;
   const earth = state.user.role === 'surgeon';
-  host.insertAdjacentHTML('beforeend', `<div class="backend-toolbar"><label>Mission day (1–90)<input id="backend-day" class="field" type="number" min="1" max="90" step="1" value="${day}"></label>${earth?'':`<label>Authorized person / cabin<select id="backend-subject" class="field">${assessment.subjects.map(s=>`<option value="${esc(s.id)}" ${s.id===subjectId?'selected':''}>${esc(s.name)}</option>`).join('')}</select></label>`}<span class="badge cyan">${esc(activeMission.toUpperCase())} · Day ${day}</span></div>`);
+  if(route()==='crew-data' && earth) {host.insertAdjacentHTML('beforeend','<p>Onboard time series are not available to the Earth role. Open Reports to view delivered messages.</p>');return;}
+  host.insertAdjacentHTML('beforeend', `<div class="backend-toolbar"><label>Mission day (1–90)<input id="backend-day" class="field" type="number" min="1" max="90" step="1" value="${day}"></label>${earth?'':`<label>Authorized person / cabin<select id="backend-subject" class="field">${assessment.subjects.filter(s=>route()!=='crew-data'||s.id!=='cabin').map(s=>`<option value="${esc(s.id)}" ${s.id===subjectId?'selected':''}>${esc(s.name)}</option>`).join('')}</select></label>`}<span class="badge cyan">${esc(activeMission.toUpperCase())} · Day ${day}</span></div>`);
+  if(route()==='crew-data') {renderCrewData(host,crewDataset,subjectId,relationshipId);return;}
   if (route() === 'ai') {
     if (earth) host.insertAdjacentHTML('beforeend','<p>Ground staff can only read reports delivered to them. Chat is available to onboard crew.</p>');
     else drawChat(host);
@@ -109,6 +114,7 @@ function draw() {
   } else {
     drawFindings(host);
     drawCheckin(host);
+    host.insertAdjacentHTML('beforeend','<p><a class="btn primary" href="crew-data.html">Explore astronaut time series and associations</a></p>');
     host.insertAdjacentHTML('beforeend','<p class="backend-info">Mission and day selection changes only the server context. Synthetic design examples remain separate.</p>');
   }
 }
@@ -120,8 +126,27 @@ function drawFindings(host) {
   }).join('')}</div>`);
 }
 function drawChat(host) {
-  host.insertAdjacentHTML('beforeend', `<p>Messages go directly to local AI without selecting a finding: Qwen3 handles general conversation; MedGemma handles health education. Generated health information is not a personal assessment. Emergency warnings take priority. Chat history is not stored on the server.</p><button class="btn" data-backend="pipeline">Check model / voice status</button><pre id="backend-pipeline" class="backend-info"></pre><div id="backend-chat" class="backend-messages" aria-live="polite"></div><form id="backend-chat-form"><label for="backend-prompt">Message / voice transcript to confirm</label><textarea class="field" id="backend-prompt" maxlength="2000" required placeholder="Ask a question or start a voice recording"></textarea><div class="backend-toolbar"><button id="backend-send" class="btn primary">Send</button><label><span><input id="backend-voice-consent" type="checkbox"> I consent to microphone recording and local STT/TTS processing</span></label><button type="button" class="btn" data-backend="record">Record 8 seconds</button><button type="button" class="btn ghost" data-backend="stop">Stop / cancel audio</button></div><p id="backend-transcript" class="backend-info">Transcripts are not sent automatically; review and confirm them first. Voice requires localhost/HTTPS and a running voice:server.</p></form>`);
+  host.insertAdjacentHTML('beforeend', `
+    <p>Messages go directly to local AI without selecting a finding. Qwen3 handles general conversation; MedGemma handles health education. When you request a health-record review, both roles receive authorized context and the server preserves original measurements and rule results. Summaries are not diagnoses. Emergency warnings take priority. Chat history is not stored on the server.</p>
+    <button class="btn" data-backend="pipeline">Check model / voice status</button>
+    <pre id="backend-pipeline" class="backend-info"></pre>
+    <div id="backend-chat" class="backend-messages" aria-live="polite"></div>
+    <form id="backend-chat-form">
+      <label for="backend-prompt">Message / voice transcript to confirm</label>
+      <textarea class="field" id="backend-prompt" maxlength="2000" required placeholder="Ask a question or start a voice recording"></textarea>
+      <div class="backend-toolbar">
+        <button id="backend-send" class="btn primary">Send</button>
+        <label><span><input id="backend-voice-consent" type="checkbox"> I consent to microphone recording and local STT/TTS processing</span></label>
+        <button type="button" class="btn" data-backend="record">Record 8 seconds</button>
+        <button type="button" class="btn ghost" data-backend="stop">Stop / cancel audio</button>
+      </div>
+      <p id="backend-transcript" class="backend-info">Transcripts are not sent automatically; review and confirm them first. Voice requires localhost/HTTPS and a running voice:server.</p>
+    </form>`);
   renderChat();
+  const selected=assessment.subjects.find(s=>s.id===subjectId);
+  const dataNotice=document.createElement('p'); dataNotice.className='backend-info';
+  dataNotice.textContent=`When you ask to analyze your health records, the local models receive authorized measurements, rule findings and up to seven previous saved check-in summaries for ${selected?.name || subjectId}, mission day ${day}. Current data: ${selected?.manual?'saved database check-in':'simulated feed (no saved check-in for this day)'}. Other people’s records, images, journal notes and messages are not attached. Ordinary chat and general health education do not include database records. Select the correct person and day above.`;
+  $('#backend-chat-form').before(dataNotice);
   const selector = document.createElement('label');
   selector.className = 'backend-toolbar';
   selector.innerHTML = 'Reply / recording language <select id="backend-language" class="field"><option value="auto">Auto (message language)</option><option value="en">English</option><option value="tr">Turkish</option></select>';
@@ -167,6 +192,10 @@ async function submitChat() {
   finally { if(current===generation) { busy=false; $('#backend-send').disabled=false; } }
 }
 async function handleAction(action, button) {
+  if(action==='crew-csv' && crewDataset) {
+    const url=URL.createObjectURL(new Blob([crewCsv(crewDataset,subjectId)],{type:'text/csv;charset=utf-8'}));
+    const a=document.createElement('a');a.href=url;a.download=`astrobio-${subjectId}-${activeMission}-${day}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return;
+  }
   if (action==='logout') {
     try { await post('/api/logout', {}); } finally { clearSession(); mount(); }
     return;
@@ -241,6 +270,13 @@ document.addEventListener('click', async event => {
   finally { if(button.isConnected) button.disabled=false; }
 }, {signal:listeners.signal});
 document.addEventListener('change', event => {
+  if(event.target.id==='crew-relationship') {relationshipId=event.target.value;draw();return;}
+  if(event.target.id==='crew-mission') {
+    const value=event.target.value==='iss'?'leo':event.target.value;
+    localStorage.setItem('astrobio-mode',value);
+    if(window.ASTROBIO_DESIGN) window.ASTROBIO_DESIGN.setMission(value); else refresh();
+    return;
+  }
   if(event.target.id==='backend-language') {
     languageMode=event.target.value;
     voice?.stop();
