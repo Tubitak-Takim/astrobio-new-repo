@@ -11,7 +11,7 @@ function boot(userId='C1') {
     if(path.endsWith('/stress')){plan.review.status='review';plan.review.action='Review sleep and ambient lighting, not treatment.';plan.review.reasons=['Self-reported stress 8/10 meets the demo rule.'];plan.review.metrics.selfReportedStress={score:body.score,at:'2026-11-15T12:00:00Z'};}
     return {persisted:true,receipt:{id:7,at:'2026-11-15T12:00:00Z'},plan};
   });
-  dispose=mountLightPlan(document.body,api,{crewId:'C1',day:60,mission:'mars',userId});return api;
+  dispose=mountLightPlan(document.body,api,{crewId:'C1',day:60,mission:'mars',userId,role:userId==='C2'?'cmo':'crew'});return api;
 }
 it('renders a seven-day calendar with the blue-light correction and research-only red panel',async()=>{
   boot();await vi.waitFor(()=>expect(document.querySelectorAll('#light-calendar article')).toHaveLength(7));
@@ -20,6 +20,18 @@ it('renders a seven-day calendar with the blue-light correction and research-onl
   expect(document.body.textContent).toContain('Research review only');
   expect(document.querySelector('[data-light-action=started]')).toBeNull();
   expect(document.querySelector('[name=wakeTime]').value).toBe('06:30');
+  expect(document.querySelector('#cabin-lighting').textContent).toContain('35%');
+  expect(document.querySelector('#cabin-lighting').textContent).toContain('Target · not measured');
+  expect(document.querySelector('#cabin-lighting').textContent).toContain('Earth UTC');
+  expect(document.querySelectorAll('details[open]')).toHaveLength(0);
+  expect(document.querySelector('#cabin-preferences')).toBeNull();
+});
+it('lets the CMO save the shared cabin schedule separately from personal preferences',async()=>{
+  const api=boot('C2');await vi.waitFor(()=>expect(document.querySelector('#cabin-preferences [name=wakeTime]').value).toBe('07:00'));
+  const form=document.querySelector('#cabin-preferences');form.elements.wakeTime.value='08:00';form.elements.bedTime.value='00:00';
+  form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+  await vi.waitFor(()=>expect(api.mock.calls.some(([path])=>path==='/api/light-plan/cabin')).toBe(true));
+  expect(JSON.parse(api.mock.calls.find(([path])=>path==='/api/light-plan/cabin')[1].body)).toMatchObject({mission:'mars',config:{wakeTime:'08:00',bedTime:'00:00',autoEnabled:true}});
 });
 it('saves a self-reported stress score and displays an automatic review without starting treatment',async()=>{
   const api=boot();await vi.waitFor(()=>expect(document.querySelector('#light-calendar').textContent).toContain('Mission day 60'));

@@ -5,6 +5,7 @@ import { buildDay, getReading, keyOf, observationsFor, type CheckIns } from './m
 export const LIGHT_PLAN_VERSION='circadian-demo-v1'
 export interface LightPreferences { wakeTime:string; bedTime:string; autoReview:boolean }
 export const LIGHT_SOURCES=[
+  {title:'NASA: astronaut sleep and adjustable station lighting',url:'https://www.nasa.gov/missions/station/seven-ways-astronauts-improve-sleep-may-help-you-snooze-better-on-earth/',note:'A stable sleep/wake schedule and adjustable light spectrum/intensity help address repeated orbital sunrises. Our curve and UTC reference are demo settings, not an approved lighting protocol.'},
   {title:'NASA: Circadian Light experiment',url:'https://www.nasa.gov/blogs/stationreport/2023/10/12/iss-daily-summary-report-10-12-2023/',note:'Research on varied lighting and circadian rhythm; not validation of this schedule.'},
   {title:'CDC/NIOSH: light color and circadian rhythms',url:'https://www.cdc.gov/niosh/work-hour-training-for-nurses/longhours/mod2/20.html',note:'Blue-containing light can suppress melatonin and shift circadian timing; not a bedtime relaxation treatment.'},
   {title:'AAD: red-light therapy evidence and precautions',url:'https://www.aad.org/public/cosmetic/safety/red-light-therapy',note:'Dermatology evidence is indication/device dependent. Not proof of astronaut cell regeneration, stress treatment or a dosing protocol.'},

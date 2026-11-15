@@ -17,6 +17,11 @@ Base URL geliştirmede `/api` proxy'si veya `http://127.0.0.1:8787/api`. JSON ku
 | POST | `/login` | `{userId,pin}` → `{token,user}`; oturum 12 saat |
 | POST | `/logout` | Mevcut oturumu siler |
 | GET | `/state` | Kullanıcının görebileceği kayıtlar |
+| PUT | `/light-plan/cabin` | CMO için ortak kabin Earth UTC takvimi; `{crewId,day,mission,config:{wakeTime,bedTime,autoEnabled}}`; yalnız simülasyon hedefi |
+| GET | `/telemetry/export.csv?day=90&mission=mars` | Yetkili yapılandırılmış kayıtların tek CSV çıktısı; yalnız gemi içi roller |
+| POST | `/telemetry/bundles` | `{day,mission,requestId}`; değişmez gzip/SQLite snapshot ve gecikmeli demo Dünya kuyruğu |
+| GET | `/telemetry/bundles` | Yetkili paket özeti; Dünya yalnız demo teslim süresi dolanları görür |
+| GET | `/telemetry/bundles/:id/csv` | Yetki + teslim süresi + SHA-256 kontrolünden sonra kayıtlı CSV |
 | GET | `/light-plan?crewId=C1&day=2&mission=mars` | Kişisel ışık/uyku takvimi, kaynak etiketleri, otomatik inceleme ve geçmiş; Dünya 403 |
 | PUT | `/light-plan/preferences` | `{crewId,day,mission,preferences:{wakeTime,bedTime,autoReview}}`; doz/cihaz ayarı kabul etmez |
 | POST | `/light-plan/stress` | `{crewId,day,mission,score}`; 0–10 tam sayı, yalnız oturum sahibinin öz-bildirimi |
@@ -44,6 +49,8 @@ Base URL geliştirmede `/api` proxy'si veya `http://127.0.0.1:8787/api`. JSON ku
 `day`: 1–90 tam sayı. Assessment için `mission`: `iss`, `moon`, `mars`; `mode`: `earth`, `space`. Varsayılanlar: 60, `mars`, `space`. Mesaj/acil durum kayıtlarında eksik veya tanınmayan mission mevcut uyumluluk nedeniyle `mars` gecikmesini kullanır.
 
 ## Yeni frontend için değerlendirme
+
+`/light-plan` artık `cabinLighting` alanında ortak görev takviminin sunucu UTC’sinden hesaplanan ışık hedefini verir; seçili astronotun kişisel saatleriyle karıştırılmaz. Gerçek lamba ölçümü/komutu yoktur. Birleşik CSV `mission-csv-v1` uzun tablo biçimindedir; birim, kaynak, ölçüm günü/zamanı ve kapsam alanlarını korur. Kayıtlı paketler gzip sıkıştırılmıştır; SHA-256 UTF-8 BOM dahil açılmış CSV baytları üzerindedir. İndirme gönderim değildir; demo teslimi gerçek alıcı onayı değildir. [Tam sözleşme ve araştırma](CIRCADIAN_TELEMETRY.md).
 
 Işık planlama uç noktaları `{persisted:true,receipt,plan}` yazma yanıtı verir; `plan.deviceConnected:false` ve `plan.exposureAuthorized:false` her zaman açıktır. Yeni sağlık verileri seçili bağlamın inceleme kurallarını tetikleyebilir; `/observations` ve `/chat` ek `lightReview` meta verisi döndürebilir. Bunlar doğrulanmış stres tanısı veya tedavi talimatı değildir. [Kural eşikleri, yetki, saat ve kalıcılık sözleşmesi](LIGHT_PLAN.md).
 

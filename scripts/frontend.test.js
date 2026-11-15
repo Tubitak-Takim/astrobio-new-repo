@@ -21,7 +21,7 @@ beforeEach(()=>{
   window.confirm=vi.fn(()=>true);
   fetchMock=vi.fn(async (path,options={})=>{
     requests.push({path,options});
-    let data = path==='/api/users'?{users:[user]}:path==='/api/login'?{token:'test-token',user}:path==='/api/state'?state:path.startsWith('/api/assessment')?assessment:path.startsWith('/api/crew-data')?crewFixture:path==='/api/chat'?{reply:'Canonical AI reply',replyId:'receipt'}:{ok:true};
+    let data = path==='/api/users'?{users:[user]}:path==='/api/login'?{token:'test-token',user}:path==='/api/state'?state:path.startsWith('/api/assessment')?assessment:path.startsWith('/api/crew-data')?crewFixture:path==='/api/telemetry/bundles'?{bundles:[]}:path==='/api/chat'?{reply:'Canonical AI reply',replyId:'receipt'}:{ok:true};
     return {ok:true,status:200,json:async()=>data};
   });
   vi.stubGlobal('fetch',fetchMock);
@@ -29,6 +29,25 @@ beforeEach(()=>{
 afterEach(()=>{adapter?.dispose();vi.restoreAllMocks();vi.unstubAllGlobals();document.body.replaceChildren();});
 
 describe('frontend API adapter',()=>{
+  it('downloads the mission CSV using authorization headers, without exposing a token in the URL',async()=>{
+    const original=fetchMock.getMockImplementation(),create=vi.fn(()=> 'blob:csv');
+    vi.stubGlobal('URL',Object.assign(class extends URL {},{createObjectURL:create,revokeObjectURL:vi.fn()}));
+    vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{});
+    fetchMock.mockImplementation((path,options)=>path.startsWith('/api/telemetry/export.csv')?Promise.resolve({ok:true,headers:{get:key=>key==='content-type'?'text/csv; charset=utf-8':'attachment; filename="mission.csv"'},blob:async()=>new Blob(['csv'])}):original(path,options));
+    await boot('reports',true);document.querySelector('[data-telemetry=export]').click();
+    await vi.waitFor(()=>expect(create).toHaveBeenCalled());
+    const call=requests.find(r=>r.path.startsWith('/api/telemetry/export.csv'))||fetchMock.mock.calls.map(([path,options])=>({path,options})).find(r=>r.path.startsWith('/api/telemetry/export.csv'));
+    expect(call.options.headers.Authorization).toBe('Bearer test-token');expect(call.path).not.toContain('test-token');
+  });
+  it('does not download a stale private CSV after the workspace is disposed',async()=>{
+    const original=fetchMock.getMockImplementation(),create=vi.fn(()=> 'blob:csv');let finish;
+    vi.stubGlobal('URL',Object.assign(class extends URL {},{createObjectURL:create,revokeObjectURL:vi.fn()}));
+    fetchMock.mockImplementation((path,options)=>path.startsWith('/api/telemetry/export.csv')?Promise.resolve({ok:true,headers:{get:key=>key==='content-type'?'text/csv':'attachment; filename="mission.csv"'},blob:()=>new Promise(resolve=>{finish=resolve;})}):original(path,options));
+    await boot('reports',true);document.querySelector('[data-telemetry=export]').click();
+    await vi.waitFor(()=>expect(finish).toBeTypeOf('function'));
+    adapter.dispose();finish(new Blob(['private csv']));await Promise.resolve();await Promise.resolve();
+    expect(create).not.toHaveBeenCalled();
+  });
   it('links an automatic chat recommendation to the matching astronaut/day/mission plan',async()=>{
     const original=fetchMock.getMockImplementation();
     fetchMock.mockImplementation((path,options)=>path==='/api/chat'?Promise.resolve({ok:true,json:async()=>({reply:'Saved report.',lightReview:{status:'review',action:'Review your ambient light and sleep plan; not treatment.'},healthRecord:{status:'saved',observation:{crewId:'C1',day:60,mission:'mars',receivedAt:'2026-11-15T12:00:00Z',symptoms:['fatigue'],values:{}}}})}):original(path,options));

@@ -10,6 +10,8 @@ The demo PIN is **2026**. Crew members see their own server records; the crew me
 
 ## Page responsibilities
 
+- **Compact circadian / export additions:** the lighting page's first card now shows the mission-shared UTC-driven cabin target; settings/calendar/research/history are collapsed by default. CMO-only cabin settings are separate from personal sleep preferences. Reports has two explicit actions, **Download one CSV** and **Queue for Earth (demo)**, with authorized structured records, compressed snapshots, integrity metadata and delayed Earth-only access. No real lamp or spacecraft downlink is connected. [Research and demonstration](../docs/CIRCADIAN_TELEMETRY.md).
+
 - **Light & Circadian Care:** personal mission-clock preferences and seven-day calendar, warm pre-sleep/dark sleep planning, stress self-reports and automatically suggested medical/sleep-plan reviews. Red-light content is research-review-only, never a device/dose/treatment controller. Available from the sidebar, with authorized subject/mission/day controls and server persistence. [Evidence, jury demo and API](../docs/LIGHT_PLAN.md).
 
 - **Live Monitoring:** authenticated partial ingestion, manual measurements, clearly labeled browser-generated demo start/stop controls, two-second monitoring, durable receipts/source/timestamps and recent history. No sensor hardware is implied. Ask to AI displays structured headache-report save receipts for the signed-in astronaut; see [jury demo and API](../docs/LIVE_MONITORING.md).

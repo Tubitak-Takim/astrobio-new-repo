@@ -8,6 +8,8 @@ Uzay görevleri için açıklanabilir sağlık değerlendirme uygulaması. HTML/
 
 ## NASA esintili sentetik astronot verileri
 
+**Otomatik kabin göstergesi:** sirkadiyen sayfasında Earth UTC’ye göre sabah açılan, gündüz aydınlık kalan, akşam kademeli azalan ve gece düşük seviyeye inen ortak kabin ışık hedefi görünür. Bu, bağlı donanım ölçümü değil simülasyondur; CMO ayarları kişisel uyku planlarından ayrıdır. **Reports → Download one CSV** yetkili yapılandırılmış sağlık/kabin/ışık kayıtlarını tek dosyada verir; **Queue for Earth (demo)** sıkıştırma, SHA-256 kontrolü ve gecikmeli demo teslimi gösterir. [Araştırma, aktarım sınırları ve sunum adımları](docs/CIRCADIAN_TELEMETRY.md).
+
 **Light & Circadian Care** sayfası sol menüden erişilebilir: kişisel görev-saati takvimi, loş-sıcak uyku hazırlığı, karanlık uyku dönemi, stres öz-bildirimi ve otomatik inceleme önerileri bulunur. Mavi ışık gece rahatlama tedavisi olarak önerilmez; kırmızı ışık yalnız CMO/araştırma incelemesi içindir. Otomatik tedavi veya cihaz kontrolü yoktur. [Sunum, kaynaklar ve API](docs/LIGHT_PLAN.md).
 
 Sohbet öz-bildirimi artık baş ağrısıyla sınırlı değildir: **16 belirti kategorisi**, Türkçe/İngilizce açık çoklu bildirimler (“Başım dönüyor ve midem bulanıyor”), görünür kayıt makbuzu ve sonraki yetkili AI incelemesine aktarım desteklenir. Bunlar tanı veya uydurulmuş ölçüm değil, kişinin bildirdiği belirtilerdir. [Desteklenen ifadeler](docs/LIVE_MONITORING.md#conservative-chat-writes-and-context).

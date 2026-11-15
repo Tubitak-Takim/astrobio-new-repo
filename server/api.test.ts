@@ -14,6 +14,8 @@ import type { Observation } from '../src/model'
 import { createServer, type Server } from 'node:http'
 import { readJson, readBinary } from './http'
 import type { LightPlanResponse } from './lightPlan'
+import { createHash, randomUUID } from 'node:crypto'
+import type { listTelemetryBundles, queueTelemetry } from './telemetry'
 
 // Only the JSON fields inspected by this integration suite. Node's fetch JSON
 // result is unknown, unlike the old DOM types; assertions below verify behavior.
@@ -44,6 +46,9 @@ type TestPayload = Pick<Assessment, 'subjects' | 'mission' | 'report'> & {
   schedule:LightPlanResponse['schedule']
   deviceConnected:boolean
   exposureAuthorized:boolean
+  cabinLighting:LightPlanResponse['cabinLighting']
+  bundle:ReturnType<typeof queueTelemetry>
+  bundles:ReturnType<typeof listTelemetryBundles>
 }
 
 let processHandle: ChildProcess | undefined
@@ -255,6 +260,17 @@ describe('live ingestion and structured chat reports over HTTP',()=>{
 })
 
 describe('light and circadian planning HTTP workflow',()=>{
+  it('shares one automatic cabin target per mission while restricting changes to the CMO',async()=>{
+    const c={crewId:'C4',day:2,mission:'mars'},config={wakeTime:'08:00',bedTime:'00:00',autoEnabled:true}
+    expect((await request('C4','PUT','/api/light-plan/cabin',{...c,config})).status).toBe(403)
+    const saved=await request('C2','PUT','/api/light-plan/cabin',{...c,config})
+    expect(saved.status).toBe(200)
+    expect(saved.data.plan.cabinLighting.config).toEqual(config)
+    expect(saved.data.plan.cabinLighting.deviceConnected).toBe(false)
+    const own=await request('C1','GET','/api/light-plan?crewId=C1&day=3&mission=mars')
+    expect(own.data.cabinLighting.config).toEqual(config)
+    expect((await request('C1','GET','/api/light-plan?crewId=C1&day=3&mission=iss')).data.cabinLighting.config.wakeTime).toBe('07:00')
+  })
   it('serves authorized calendars and rejects unsupported treatment/device controls',async()=>{
     expect((await request(null,'GET','/api/light-plan')).status).toBe(401)
     expect((await request('FS','GET','/api/light-plan')).status).toBe(403)
@@ -291,6 +307,43 @@ describe('light and circadian planning HTTP workflow',()=>{
     const red=await request('C4','POST','/api/light-plan/actions',{...c,kind:'red_review',action:'requested'})
     expect(red.status).toBe(200)
     expect(red.data.plan.exposureAuthorized).toBe(false)
+  })
+})
+
+describe('mission CSV export and simulated Earth downlink over HTTP',()=>{
+  it('downloads a protected CSV with checksum and excludes private records',async()=>{
+    expect((await fetch(base+'/api/telemetry/export.csv')).status).toBe(401)
+    expect((await request('FS','GET','/api/telemetry/export.csv')).status).toBe(403)
+    expect((await request('C1','GET','/api/telemetry/export.csv?day=91')).status).toBe(400)
+    database!.prepare('INSERT INTO notes (crew_id,day,text,at) VALUES (?,?,?,?)').run('C1',1,'PRIVATE_CSV_NOTE_DO_NOT_EXPORT',new Date().toISOString())
+    const response=await fetch(base+'/api/telemetry/export.csv?day=2&mission=mars',{headers:{Authorization:`Bearer ${tokens.C1}`}})
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toContain('text/csv')
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    const bytes=Buffer.from(await response.arrayBuffer())
+    expect(response.headers.get('x-content-sha256')).toBe(createHash('sha256').update(bytes).digest('hex'))
+    expect(bytes.toString('utf8')).toContain('health_snapshot')
+    expect(bytes.toString('utf8')).not.toContain('PRIVATE_CSV_NOTE_DO_NOT_EXPORT')
+    expect(bytes.toString('utf8')).not.toContain(tokens.C1)
+    expect(bytes.toString('utf8')).not.toContain('data:image')
+    expect(bytes.toString('utf8')).not.toContain('"C4"')
+  })
+  it('preserves queued snapshots and prevents Earth or other crew from reading them too early',async()=>{
+    const context={day:2,mission:'mars',requestId:randomUUID()}
+    const result=await request('C1','POST','/api/telemetry/bundles',context)
+    expect(result.status).toBe(201)
+    const id=result.data.bundle.id
+    database!.prepare('UPDATE telemetry_bundles SET deliver_at=? WHERE id=?').run(Date.now()+60_000,id)
+    expect(result.data.bundle.physicalDeliveryVerified).toBe(false)
+    expect((await request('C1','POST','/api/telemetry/bundles',context)).data.bundle.id).toBe(id)
+    expect((await request('FS','GET','/api/telemetry/bundles')).data.bundles.some(b=>b.id===id)).toBe(false)
+    expect((await request('FS','GET',`/api/telemetry/bundles/${id}/csv`)).status).toBe(404)
+    expect((await request('C4','GET',`/api/telemetry/bundles/${id}/csv`)).status).toBe(404)
+    database!.prepare('UPDATE telemetry_bundles SET deliver_at=0 WHERE id=?').run(id)
+    expect((await request('FS','GET','/api/telemetry/bundles')).data.bundles.some(b=>b.id===id)).toBe(true)
+    const csv=await fetch(base+`/api/telemetry/bundles/${id}/csv`,{headers:{Authorization:`Bearer ${tokens.FS}`}})
+    expect(csv.status).toBe(200)
+    expect(createHash('sha256').update(Buffer.from(await csv.arrayBuffer())).digest('hex')).toBe(result.data.bundle.sha256)
   })
 })
 

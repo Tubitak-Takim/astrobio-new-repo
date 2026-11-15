@@ -4,6 +4,7 @@ import { replyLanguage } from './chat-language.js';
 import { renderCrewData, crewCsv } from './crew-data.js';
 import { mountLiveMonitor } from './live-monitor.js';
 import { mountLightPlan } from './light-plan.js';
+import { mountTelemetryPanel } from './telemetry.js';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const $ = (s) => document.querySelector(s);
@@ -60,6 +61,21 @@ async function api(path, options = {}) {
   return data;
 }
 const post = (path, body) => api(path, {method:'POST', body:JSON.stringify(body)});
+async function downloadCsv(path) {
+  const current=generation;
+  const response=await fetch(path,{headers:{Authorization:`Bearer ${token}`}});
+  if(current!==generation)return;
+  if(!response.ok) {
+    const data=await response.json();
+    if(response.status===401){clearSession();mount();}
+    throw new Error(data.error||'CSV download failed.');
+  }
+  if(!response.headers.get('content-type')?.startsWith('text/csv'))throw new Error('Unexpected export format.');
+  const filename=response.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1]||'astrobio-mission.csv';
+  const blob=await response.blob();if(current!==generation)return;
+  const url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
 
 async function refresh() {
   const current = ++generation;
@@ -119,7 +135,7 @@ function draw() {
     host.insertAdjacentHTML('beforeend',`<label>Mission<select class="field" id="crew-mission">${[['iss','LEO / Space station'],['moon','Moon surface'],['mars','Mars transit']].map(([id,title])=>`<option value="${id}" ${activeMission===id?'selected':''}>${title}</option>`).join('')}</select></label>`);
     const select=$('#backend-subject');select.querySelector('option[value="cabin"]')?.remove();
     if(subjectId==='cabin')subjectId=select.value;
-    disposeLive=route()==='lighting'?mountLightPlan(host,api,{crewId:subjectId,day,mission:activeMission,userId:state.user.id}):mountLiveMonitor(host,api,{crewId:subjectId,day,mission:activeMission});return;
+    disposeLive=route()==='lighting'?mountLightPlan(host,api,{crewId:subjectId,day,mission:activeMission,userId:state.user.id,role:state.user.role}):mountLiveMonitor(host,api,{crewId:subjectId,day,mission:activeMission});return;
   }
   if(route()==='crew-data') {renderCrewData(host,crewDataset,subjectId,relationshipId);return;}
   if (route() === 'ai') {
@@ -179,6 +195,7 @@ function renderChat() {
   log.scrollTop = log.scrollHeight;
 }
 function drawReports(host) {
+  if(route()==='reports')disposeLive=mountTelemetryPanel(host,api,downloadCsv,{day,mission:activeMission,role:state.user.role});
   if (assessment) host.insertAdjacentHTML('beforeend', `<h3>Server-generated report</h3><pre class="backend-report">${esc(assessment.report)}</pre><div class="backend-toolbar"><button class="btn" data-backend="download">Download report</button><button class="btn primary" data-backend="send-report">Send report to ground team</button></div>`);
   host.insertAdjacentHTML('beforeend', `<h3>Authorized messages and delivery status</h3><p class="backend-info">Delivery follows the server's mission delay. The demo time scale is accelerated. Use Refresh for new deliveries; this is not a real Earth link.</p><div class="backend-messages">${state.messages.map(m=>`<article class="backend-message"><strong>${esc(m.from_name)} · Day ${esc(m.day)} · ${m.delivered?'Delivered':'Queued for delivery'}</strong><p>${esc(m.body)}</p></article>`).join('') || 'No visible messages yet.'}</div><form id="backend-message-form"><label for="backend-message">Message</label><textarea id="backend-message" class="field" maxlength="4000" required></textarea>${state.user.role==='surgeon'?`<label>Recipient<select id="backend-recipient" class="field">${users.filter(u=>u.role!=='surgeon').map(u=>`<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('')}</select></label>`:''}<button class="btn primary">Send message</button></form>`);
 }

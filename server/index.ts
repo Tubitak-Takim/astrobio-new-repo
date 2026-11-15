@@ -41,6 +41,8 @@ import { crewDatasetFor, ensureCrewDataset } from './crewDataset.ts'
 import { ensureObservations, readObservations, saveObservation } from './observations.ts'
 import { directSymptomReports } from '../src/symptoms.ts'
 import { ensureLightPlan, lightContext, lightPlanFor, saveLightAction, saveLightPreferences, saveLightStress, syncLightReview } from './lightPlan.ts'
+import { saveCabinLighting } from './cabinLighting.ts'
+import { createMissionCsv, downloadTelemetryBundle, ensureTelemetry, listTelemetryBundles, queueTelemetry, telemetryContext } from './telemetry.ts'
 
 const PORT = Number(process.env.API_PORT ?? 8787)
 const dbFile = process.env.DB_FILE ?? 'data/crew-health.sqlite'
@@ -64,6 +66,8 @@ const sessionLifetimeMs = 12 * 60 * 60 * 1000
 ensureCrewDataset(db)
 ensureObservations(db)
 ensureLightPlan(db)
+ensureTelemetry(db)
+const allowTelemetry=rateLimiter(6,60_000)
 const allowLightWrites=rateLimiter(30,60_000)
 const allowIngest = rateLimiter(120,60_000)
 const allowLogin = rateLimiter(10, 60_000)
@@ -146,6 +150,10 @@ function send(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
   res.end(JSON.stringify(body))
 }
+function sendCsv(res:ServerResponse,packet:{csv:string|Buffer;filename:string;sha256:string;rowCount:number}) {
+  res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':`attachment; filename="${packet.filename}"`,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Content-SHA256':packet.sha256,'X-Export-Row-Count':String(packet.rowCount)})
+  res.end(packet.csv)
+}
 
 function userFrom(req: IncomingMessage): User | null {
   const token = (req.headers.authorization ?? '').replace(/^Bearer /, '')
@@ -199,14 +207,33 @@ const server = createServer(async (req, res) => {
 
     if (method === 'GET' && path === '/api/state') return send(res, 200, stateFor(user))
 
+    if(method==='GET' && path==='/api/telemetry/export.csv') {
+      const c=telemetryContext(user,{day:Number(url.searchParams.get('day') ?? 60),mission:url.searchParams.get('mission') ?? 'mars'})
+      if(!allowTelemetry(user.id))return send(res,429,{error:'Too many exports. Try again in a minute.'})
+      return sendCsv(res,createMissionCsv(db,user,c,allCheckIns()))
+    }
+    if(path==='/api/telemetry/bundles') {
+      if(method==='GET')return send(res,200,{bundles:listTelemetryBundles(db,user),simulated:true,physicalDeliveryVerified:false})
+      if(method==='POST') {
+        const body=await readJson(req),c=telemetryContext(user,body)
+        if(!allowTelemetry(user.id))return send(res,429,{error:'Too many exports. Try again in a minute.'})
+        return send(res,201,{bundle:queueTelemetry(db,user,c,allCheckIns(),body.requestId),simulated:true,physicalDeliveryVerified:false})
+      }
+    }
+    const telemetryDownload=path.match(/^\/api\/telemetry\/bundles\/([^/]+)\/csv$/)
+    if(method==='GET' && telemetryDownload) {
+      if(!allowTelemetry(user.id))return send(res,429,{error:'Too many exports. Try again in a minute.'})
+      return sendCsv(res,downloadTelemetryBundle(db,user,telemetryDownload[1]))
+    }
+
     if(path==='/api/light-plan' && method==='GET') {
       const c=lightContext(user,{crewId:url.searchParams.get('crewId') ?? user.id,day:Number(url.searchParams.get('day') ?? 60),mission:url.searchParams.get('mission') ?? 'mars'})
       return send(res,200,lightPlanFor(db,c,allCheckIns()))
     }
-    if((path==='/api/light-plan/preferences' && method==='PUT') || (['/api/light-plan/stress','/api/light-plan/actions'].includes(path) && method==='POST')) {
+    if((['/api/light-plan/preferences','/api/light-plan/cabin'].includes(path) && method==='PUT') || (['/api/light-plan/stress','/api/light-plan/actions'].includes(path) && method==='POST')) {
       const body=await readJson(req),c=lightContext(user,body)
       if(!allowLightWrites(user.id))return send(res,429,{error:'Too many lighting-plan updates. Try again in a minute.'})
-      const receipt=path.endsWith('/preferences')?saveLightPreferences(db,user,c,body.preferences):path.endsWith('/stress')?saveLightStress(db,user,c,body.score):saveLightAction(db,user,c,body.kind,body.action)
+      const receipt=path.endsWith('/cabin')?saveCabinLighting(db,user,c.mission,body.config):path.endsWith('/preferences')?saveLightPreferences(db,user,c,body.preferences):path.endsWith('/stress')?saveLightStress(db,user,c,body.score):saveLightAction(db,user,c,body.kind,body.action)
       return send(res,200,{persisted:true,receipt,plan:lightPlanFor(db,c,allCheckIns())})
     }
 

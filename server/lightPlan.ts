@@ -5,8 +5,10 @@ import { isMission } from '../src/data/missions.ts'
 import type { CheckIns } from '../src/model.ts'
 import { LIGHT_PLAN_VERSION, LIGHT_SOURCES, defaultLightPreferences, lightReview, lightSchedule, validLightPreferences, type LightPreferences } from '../src/lightPlan.ts'
 import { RequestError } from './http.ts'
+import { cabinLightFor, ensureCabinLighting } from './cabinLighting.ts'
 
 export function ensureLightPlan(db:DatabaseSync) {
+  ensureCabinLighting(db)
   db.exec(`CREATE TABLE IF NOT EXISTS light_preferences (crew_id TEXT NOT NULL, mission TEXT NOT NULL, preferences TEXT NOT NULL, at TEXT NOT NULL, by_user TEXT NOT NULL, PRIMARY KEY(crew_id,mission));
     CREATE TABLE IF NOT EXISTS light_stress_reports (id INTEGER PRIMARY KEY AUTOINCREMENT, crew_id TEXT NOT NULL, mission TEXT NOT NULL, day INTEGER NOT NULL, score INTEGER NOT NULL, at TEXT NOT NULL, by_user TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS light_review_alerts (crew_id TEXT NOT NULL, mission TEXT NOT NULL, day INTEGER NOT NULL, status TEXT NOT NULL, reasons TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(crew_id,mission,day));
@@ -50,7 +52,7 @@ export function syncLightReview(db:DatabaseSync,c:Context,checkIns:CheckIns) {
 export function lightPlanFor(db:DatabaseSync,c:Context,checkIns:CheckIns) {
   const prefs=preferencesFor(db,c)
   return {...c,version:LIGHT_PLAN_VERSION,...prefs,clock:'Mission-local operational clock; not browser time or planetary daylight',simulated:true,deviceConnected:false,exposureAuthorized:false,
-    schedule:lightSchedule(c.day,prefs.preferences),review:syncLightReview(db,c,checkIns),
+    schedule:lightSchedule(c.day,prefs.preferences),review:syncLightReview(db,c,checkIns),cabinLighting:cabinLightFor(db,c.mission),
     events:db.prepare('SELECT id,kind,action,at,by_user,detail FROM light_plan_events WHERE crew_id=? AND mission=? AND day=? ORDER BY id DESC LIMIT 30').all(c.crewId,c.mission,c.day),sources:LIGHT_SOURCES,
     limitations:'Illustrative circadian planning and research-review workflow, not a prescription or medical device. No light doses, irradiance, wavelengths, automatic exposure or cell-regeneration/stress-treatment claims. Mood/sleep rules are not validated stress detection. Screen colors are decorative only. Medical review must consider eye conditions, light sensitivity, photosensitizing medicines and mood-disorder history before actual light treatment.'}
 }
