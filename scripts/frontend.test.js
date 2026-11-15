@@ -28,6 +28,23 @@ beforeEach(()=>{
 afterEach(()=>{adapter?.dispose();vi.restoreAllMocks();vi.unstubAllGlobals();document.body.replaceChildren();});
 
 describe('frontend API adapter',()=>{
+  it('mounts the visible live workspace without copying the generic backend connection panel',async()=>{
+    const original=fetchMock.getMockImplementation();
+    fetchMock.mockImplementation((path,options)=>path.startsWith('/api/observations')?Promise.resolve({ok:true,json:async()=>({observations:[],total:0,serverTime:'2026-11-15T12:00:00Z'})}):original(path,options));
+    await boot('live',true);
+    await wait('#live-start');
+    expect(document.querySelector('#backend-panel')).toBeNull();
+    expect(document.body.textContent).toContain('Live Monitoring');
+    expect(document.body.textContent).toContain('No physical sensor');
+    expect(document.querySelector('#backend-subject option[value=cabin]')).toBeNull();
+  });
+  it('shows the saved health-record receipt independently of model prose',async()=>{
+    const original=fetchMock.getMockImplementation();
+    fetchMock.mockImplementation((path,options)=>path==='/api/chat'?Promise.resolve({ok:true,json:async()=>({reply:'Review your symptoms with the medical officer.',healthRecord:{status:'saved',observation:{crewId:'C1',day:60,mission:'mars',receivedAt:'2026-11-15T12:00:00Z'}}})}):original(path,options));
+    await boot('ai',true);document.querySelector('#backend-prompt').value='Başım ağrıyor';submit('#backend-chat-form');
+    await vi.waitFor(()=>expect(document.querySelector('#backend-chat').textContent).toContain('Health record saved · C1 · Day 60'));
+    expect(document.body.textContent).toContain('automatically saved');
+  });
   it('signs in and renders authorized canonical findings, separate from design demos',async()=>{
     await boot();
     document.querySelector('[name=pin]').value='2026';

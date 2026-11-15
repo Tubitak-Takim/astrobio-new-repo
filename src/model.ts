@@ -10,7 +10,10 @@ import { assessCabin, assessCrew, type CrewReading, type Finding, type ImageAtta
 
 export const CABIN_ID = 'cabin'
 
-export type CheckIns = Record<string, CrewReading>
+export const OBSERVATIONS = Symbol('observations')
+export interface Observation { id:number; crewId:string; day:number; mission:MissionId; source:string; measuredAt:string; receivedAt:string; values:Partial<CrewReading> }
+export type CheckIns = Record<string, CrewReading> & { [OBSERVATIONS]?: Observation[] }
+export const observationsFor = (checkIns:CheckIns,crewId:string,day:number,mission:MissionId) => (checkIns[OBSERVATIONS] ?? []).filter(o=>o.crewId===crewId && o.day===day && o.mission===mission)
 export const keyOf = (crewId: string, day: number) => `${crewId}:${day}`
 
 interface Feed {
@@ -65,6 +68,12 @@ function provenance(id: string, day: number, manual: boolean): Provenance {
 
 /** What the system knows about one crew member on a day: each value from its latest measurement. */
 export function getReading(checkIns: CheckIns, crew: CrewMember, day: number, mission: MissionId = 'mars'): CrewReading {
+  const reading = baseReading(checkIns, crew, day, mission)
+  for(const observation of observationsFor(checkIns,crew.id,day,mission)) Object.assign(reading,observation.values)
+  return reading
+}
+
+function baseReading(checkIns: CheckIns, crew: CrewMember, day: number, mission: MissionId): CrewReading {
   const manual = checkIns[keyOf(crew.id, day)]
   const today = readingOn(crew, day, mission)
   if (manual) return { ...today, ...manual }
@@ -119,7 +128,13 @@ export function buildDay(day: number, checkIns: CheckIns, mission: MissionId = '
       manual,
       earth: assessCrew(r, c.baseline, cabin, 'earth'),
       space,
-      info: Object.fromEntries(space.map((f) => [f.id, provenance(f.id, day, manual)])),
+      info: Object.fromEntries(space.map((f) => {
+        const keys:Record<string,string[]>={vitals:['restingHrBpm','spo2Pct'],basics:['bodyTempC','systolicBp','diastolicBp','glucoseMgDl'],headache:['headache']}
+        const reports=observationsFor(checkIns,c.id,day,mission).filter(o=>Object.keys(o.values).some(k=>keys[f.id]?.includes(k)))
+        const p=provenance(f.id,day,manual)
+        if(reports.length) p.source=`Mixed reading; latest update: ${reports.at(-1)!.source} (${reports.at(-1)!.measuredAt}). Only supplied fields updated.`
+        return [f.id,p]
+      })),
     }
   })
   const cabinSpace = assessCabin(cabin, 'space')

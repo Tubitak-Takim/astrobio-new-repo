@@ -3,6 +3,7 @@ import { directChat } from './directChat.ts'
 import type { Finding } from '../src/triage.ts'
 import type { Provenance } from '../src/model.ts'
 import { hasGroundedNumbers, requestsHealthRecords, type HealthContext } from './healthContext.ts'
+import { directHeadacheReport } from './observations.ts'
 
 export type Language = 'tr' | 'en'
 const OPENINGS = {
@@ -36,6 +37,7 @@ export async function companionStatus() {
 export function conversationRoute(message: string, hasFinding: boolean) {
   const value = message.toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '').replace(/ı/g, 'i')
   if (/intihar|kendime zarar|yasamak istemiyorum|suicid|kill myself|self.harm|nefes alamiyorum|gogus agr|bayild|bilincini kaybet|cannot breathe|can.?t breathe|chest pain|unconscious/.test(value)) return 'urgent' as const
+  if(directHeadacheReport(message)) return 'medical' as const
   // This chooses a model, not whether a message is allowed. All non-urgent
   // free-text messages reach a model without requiring a finding selection.
   if (hasFinding || requestsHealthRecords(message) || /\b(health|healthcare|medical|symptom\w*|diagnos\w*|medicin\w*|medication\w*|pain|sleep|nutrition|exercise|blood|oxygen|heart|fever|wellness|hydration|saglik\w*|belirti\w*|ilac\w*|hastalik\w*|agri\w*|uyku\w*|beslen\w*|egzersiz\w*|nabiz\w*|ates\w*)\b/.test(value)) return 'medical' as const
@@ -78,9 +80,12 @@ function contextDescription(context: HealthContext, language: Language) {
   const origin = context.origin === 'database_checkin'
     ? (language === 'tr' ? 'veritabanına kaydedilmiş check-in' : 'saved database check-in')
     : (language === 'tr' ? 'simüle sensör verisi (bu gün için kayıtlı check-in yok)' : 'simulated sensor feed (no saved check-in for this day)')
-  return language === 'tr'
+  const reportNotice=context.recentObservations?.length
+    ? (language==='tr'?` Ek olarak ${context.recentObservations.length} kayıtlı alan güncellemesi var; yalnız bildirilen alanlar değiştirildi.`:` Includes ${context.recentObservations.length} saved field updates; only supplied fields were changed.`)
+    : ''
+  return (language === 'tr'
     ? `Veri bağlamı: ${context.subjectId}, görev günü ${context.day}; ${origin}. Önceki kayıt sayısı: ${context.previousSavedReadings.length}.`
-    : `Data context: ${context.subjectId}, mission day ${context.day}; ${origin}. Previous saved records included: ${context.previousSavedReadings.length}.`
+    : `Data context: ${context.subjectId}, mission day ${context.day}; ${origin}. Previous saved records included: ${context.previousSavedReadings.length}.`) + reportNotice
 }
 
 function recordedValues(context: HealthContext, language: Language) {
@@ -89,7 +94,8 @@ function recordedValues(context: HealthContext, language: Language) {
     ? [['co2MmHg','CO₂','mmHg'],['cumulativeDoseMSv',language === 'tr' ? 'Birikimli doz' : 'Cumulative dose','mSv']]
     : [['restingHrBpm',language === 'tr' ? 'Nabız' : 'Heart rate','bpm'],['spo2Pct','SpO₂','%'],['sleepHours7d',language === 'tr' ? '7 günlük uyku ortalaması' : '7-day sleep average',language === 'tr' ? 'saat' : 'hours'],['bodyTempC',language === 'tr' ? 'Sıcaklık' : 'Temperature','°C']]
   const summary = fields.filter(([key]) => typeof values[key] === 'number').map(([key,label,unit]) => `${label}: ${values[key]} ${unit}`).join('; ')
-  return `${language === 'tr' ? 'Kayıt değerleri' : 'Recorded values'}: ${summary}.`
+  const reports=(context.recentObservations ?? []).filter(o=>o.values.headache!==undefined).map(o=>language==='tr'?`Gün ${o.day}: baş ağrısı ${o.values.headache?'var':'yok'} (${o.source}, ${o.measuredAt})`:`Day ${o.day}: headache ${o.values.headache?'reported':'not reported'} (${o.source}, ${o.measuredAt})`).join('; ')
+  return `${language === 'tr' ? 'Kayıt değerleri' : 'Recorded values'}: ${summary}.${reports?' '+reports:''}`
 }
 
 function contextMetadata(context: HealthContext) {

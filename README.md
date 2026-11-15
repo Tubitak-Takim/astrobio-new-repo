@@ -8,6 +8,8 @@ Uzay görevleri için açıklanabilir sağlık değerlendirme uygulaması. HTML/
 
 ## NASA esintili sentetik astronot verileri
 
+**Live Monitoring** bölümünde görünür başlat/durdur kontrollü demo akışı, elle kısmi ölçüm gönderme, zaman damgaları ve kalıcı örnek geçmişi bulunur. Aynı işlev `/api/observations` ile dış istemcilere açıktır. **Ask to AI** içinde kendi hesabınız seçiliyken “Başım ağrıyor” dediğinizde yapılandırılmış bildirim kaydedilir ve bağlama girer; kayıt makbuzu ekranda gösterilir. [Jüri sunum adımları ve güvenli API kullanımı](docs/LIVE_MONITORING.md).
+
 **Crew Data** bölümünde dört farklı astronotun 90 günlük profili, zaman serileri, saçılım grafikleri ve hesaplanan ilişkiler bulunur. C2 / M. Chen hesabıyla (PIN `2026`) dördünü karşılaştırabilir; diğer mürettebat hesapları yalnız kendilerini görür. Görev gününü **90** seçerek tüm senaryoyu inceleyin. Başlangıçta ayrı, sürümlü bir SQLite tablosu hazırlanır; mevcut manuel kayıtlar korunur. Bunlar gerçek NASA sağlık verileri değildir. [Veri üretimi, kaynaklar ve ilişki sınırları](docs/SYNTHETIC_CREW_DATA.md).
 
 ## Ekip

@@ -36,6 +36,8 @@ The authorized backend connection panel remains **only in Interactive Health Che
 
 ## Associations and limits
 
+**Live updates:** the separate `health_observations` history can overlay supplied fields on either base type. Base `origin` does not imply that all resulting fields are synthetic/manual; the explorer labels saved overlays and exports their counts/latest source/time. Associations then describe mixed records. See [Live Monitoring](LIVE_MONITORING.md) for scope, precedence and chat self-reports.
+
 The server computes Pearson r for sleep–heart rate, sleep–mood, urine–heart rate, CO₂–headache, exercise–body mass and mission day–vitamin D. Headache is coded 0/1 (point-biserial). Coefficients are `null` / N/A with fewer than eight observations or a constant series. Eight is a **demo reporting minimum**, not a guarantee of statistical reliability.
 
 These are descriptive within-person associations, not pooled effects. Shared time trends, autocorrelation, programmed drivers and held samples can create strong coefficients. Ninety daily snapshots do not mean ninety independent lab specimens. No p-values, causal claims, disease probabilities or clinical performance scores are produced. Manual entries can change results; their count is displayed.

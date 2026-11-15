@@ -84,6 +84,8 @@ Veritabanı bağlamı güncellemesi: **193 Node/DOM testi ve TypeScript kontrol�
 
 ## Sentetik astronot senaryoları doğrulaması
 
+Canlı izleme/sohbet öz-bildirimi eklemesiyle **235 Node/DOM testi ve TypeScript kontrolü başarılıdır**. Yeni kapsam: gerçek HTTP ve geçici SQLite ile kalıcı kısmi kayıt, tam check-in/görüntü koruma, kaynak/zaman doğrulama, geç gelen örnek sırası, rol izolasyonu, tutucu Türkçe/İngilizce baş ağrısı çıkarımı, sonraki yetkili bağlam, onaylı ses/acil kural önceliği, görünür makbuz ve demo durdurma/temizleme. [Sunum ve sınırlar](LIVE_MONITORING.md). Gerçek sensör bağlantısı/klinik doğrulama iddia edilmez.
+
 **204 Node/DOM testi ve TypeScript kontrolü başarılıdır.** Dört profil × 90 gün × üç görev için 1.080 okumanın tekrarlanabilirliği ve giriş aralıkları, programlanmış ilişki yönleri, sabit/kısa seride korelasyon üretmeme, ayrı tabloya idempotent ekleme ve manuel kayıtların korunması sınanır. Gerçek geçici SQLite/API testleri rol izolasyonu, gelecekteki günlerin dışlanması ve fotoğraf/not dışlamasını; DOM testleri grafikler, astronot değiştirme, LEO/ISS eşleşmesi ve CSV kapsamını doğrular. Veri üretimi ve katsayılar klinik doğrulama değildir; yeni ekranın gerçek tarayıcı görsel/erişilebilirlik kontrolü ayrıca yapılmalıdır. [Kaynak ve kapsam](SYNTHETIC_CREW_DATA.md).
 
 ## Açık işler / üretim engelleri

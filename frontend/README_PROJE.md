@@ -10,6 +10,8 @@ The demo PIN is **2026**. Crew members see their own server records; the crew me
 
 ## Page responsibilities
 
+- **Live Monitoring:** authenticated partial ingestion, manual measurements, clearly labeled browser-generated demo start/stop controls, two-second monitoring, durable receipts/source/timestamps and recent history. No sensor hardware is implied. Ask to AI displays structured headache-report save receipts for the signed-in astronaut; see [jury demo and API](../docs/LIVE_MONITORING.md).
+
 - **Crew Data:** four distinct NASA-inspired fictional scenarios, 90 days, mission/person selection, six time series, descriptive correlations/scatter plots, recent records and selected-profile CSV. The server seeds 1,080 snapshots (four crew × 90 days × three missions) separately from manual check-ins. Sign in as C2 to compare all crew. This page has no generic backend connection panel. [Dataset provenance and limitations](../docs/SYNTHETIC_CREW_DATA.md).
 
 - **Interactive Health Check:** the only page displaying the **ASTROBIO · AUTHORIZED BACKEND CONNECTION** panel. It contains sign-in, mission day, authorized subject/cabin selection, canonical findings, sources, measurement age and full-day check-in forms. The anatomical map below it is a separate visual demo, not a regional assessment of the selected person.

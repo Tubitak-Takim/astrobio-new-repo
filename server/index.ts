@@ -26,7 +26,7 @@ import { allowed, reword, rewordEnabled } from './reword.js'
 import { CREW, MISSION_DAYS } from '../src/data/simulatedCrew.ts'
 import { isMission, linkDelay } from '../src/data/missions.ts'
 import { DEMO_PIN, USERS, canSee, type User } from '../src/data/users.ts'
-import { buildDay, flagged, keyOf, type CheckIns } from '../src/model.ts'
+import { buildDay, flagged, keyOf, OBSERVATIONS, type CheckIns } from '../src/model.ts'
 import { MAX_IMAGE_CHARS, validateReading } from '../src/validate.ts'
 import { validateEmergencySteps } from '../src/validate.ts'
 import { canReadEmergency, canReadEvent, canReadMessage, MESSAGE_MAX_CHARS, REPORT_MAX_CHARS } from '../src/access.ts'
@@ -38,6 +38,7 @@ import { MAX_VOICE_BYTES, ReplyReceipts, synthesizeVoice, transcribeVoice, voice
 import { serveFrontend } from './static.ts'
 import { healthContextFor, requestsHealthRecords } from './healthContext.ts'
 import { crewDatasetFor, ensureCrewDataset } from './crewDataset.ts'
+import { directHeadacheReport, ensureObservations, readObservations, saveObservation } from './observations.ts'
 
 const PORT = Number(process.env.API_PORT ?? 8787)
 const dbFile = process.env.DB_FILE ?? 'data/crew-health.sqlite'
@@ -59,6 +60,8 @@ for (const [table, column, type] of [['checkins', 'by_user', 'TEXT'], ['events',
 }
 const sessionLifetimeMs = 12 * 60 * 60 * 1000
 ensureCrewDataset(db)
+ensureObservations(db)
+const allowIngest = rateLimiter(120,60_000)
 const allowLogin = rateLimiter(10, 60_000)
 const allowLocalAi = rateLimiter(6, 60_000)
 const allowChat = rateLimiter(6, 60_000)
@@ -75,9 +78,12 @@ const nameOf = (id: string) => USERS.find((u) => u.id === id)?.name ?? id
 
 function allCheckIns(): CheckIns {
   const out: CheckIns = {}
-  for (const row of db.prepare('SELECT crew_id, day, reading FROM checkins').all()) {
+  const updated:Record<string,string>={}
+  for (const row of db.prepare('SELECT crew_id, day, reading, updated_at FROM checkins').all()) {
     out[keyOf(String(row.crew_id), Number(row.day))] = JSON.parse(String(row.reading))
+    updated[keyOf(String(row.crew_id),Number(row.day))]=String(row.updated_at)
   }
+  out[OBSERVATIONS]=readObservations(db).filter(o=>!updated[keyOf(o.crewId,o.day)] || o.measuredAt>updated[keyOf(o.crewId,o.day)])
   return out
 }
 
@@ -189,6 +195,21 @@ const server = createServer(async (req, res) => {
 
     if (method === 'GET' && path === '/api/state') return send(res, 200, stateFor(user))
 
+    if (path === '/api/observations' && (method==='GET' || method==='POST')) {
+      if(user.role==='surgeon') return send(res,403,{error:'Onboard observations are not available to Earth.'})
+      if(method==='POST') {
+        if(!allowIngest(user.id)) return send(res,429,{error:'Too many measurements. Try again in a minute.'})
+        const observation=saveObservation(db,user,await readJson(req))
+        return send(res,201,{persisted:true,observation})
+      }
+      const crewId=url.searchParams.get('crewId') ?? user.id
+      const day=Number(url.searchParams.get('day') ?? 60),mission=url.searchParams.get('mission') ?? 'mars'
+      if(!canSee(user,crewId)) return send(res,403,{error:'Not authorized for this astronaut.'})
+      if(!CREW.some(c=>c.id===crewId) || !validDay(day) || !isMission(mission)) return send(res,400,{error:'Invalid observation context.'})
+      const observations=readObservations(db).filter(o=>o.crewId===crewId && o.day===day && o.mission===mission)
+      return send(res,200,{observations:observations.slice(-50).reverse(),total:observations.length,serverTime:nowIso()})
+    }
+
     if (method === 'GET' && path === '/api/crew-data') {
       if(user.role==='surgeon') return send(res,403,{error:'Earth can only read delivered reports, not onboard crew time series.'})
       const day=Number(url.searchParams.get('day') ?? 60)
@@ -202,7 +223,7 @@ const server = createServer(async (req, res) => {
 
     if (method === 'GET' && path === '/api/ai/pipeline/status') {
       const [medical, companion] = await Promise.all([localAiStatus(), companionStatus()])
-      return send(res, 200, { medical, companion, voice: voiceStatus(), memory: 'stateless' })
+      return send(res, 200, { medical, companion, voice: voiceStatus(), memory: 'stateless', healthMemory:'structured_observations' })
     }
 
     if (method === 'POST' && path === '/api/chat') {
@@ -216,19 +237,27 @@ const server = createServer(async (req, res) => {
       if (body.inputOrigin === 'voice' && body.transcriptConfirmed !== true) return send(res, 400, { error: 'Confirm the transcript before sending it to chat.' })
       if (!message || !validDay(day) || !isMission(mission) || (language !== 'tr' && language !== 'en') || typeof crewId !== 'string' || (body.findingId !== undefined && typeof body.findingId !== 'string') || (body.inputOrigin !== undefined && body.inputOrigin !== 'text' && body.inputOrigin !== 'voice')) return send(res, 400, { error: 'Invalid chat message or context.' })
       if (crewId !== 'cabin' && !canSee(user, crewId)) return send(res, 403, { error: 'You may only chat about authorized findings.' })
-      const checkIns = allCheckIns()
-      const subject = assessmentFor(user, day, checkIns, mission, 'space').subjects.find((s) => s.id === crewId)
+      let checkIns = allCheckIns()
+      let subject = assessmentFor(user, day, checkIns, mission, 'space').subjects.find((s) => s.id === crewId)
       if (!subject) return send(res, 404, { error: 'Subject not found.' })
       const requested = body.findingId === undefined ? undefined : subject.space.find((f) => f.id === body.findingId)
       if (body.findingId !== undefined && !requested) return send(res, 404, { error: 'Finding not found.' })
       // An existing urgent finding for this subject takes priority over social chat.
-      const urgentFinding = subject.space.find((f) => f.level === 'red')
+      let urgentFinding = subject.space.find((f) => f.level === 'red')
       if (!urgentFinding && conversationRoute(message, false) !== 'urgent' && !allowChat(user.id)) return send(res, 429, { error: 'Too many chat requests.' })
-      const finding = urgentFinding ?? requested
-      const context = !finding && requestsHealthRecords(message) ? healthContextFor(user, crewId, day, mission, checkIns) : undefined
+      const qualifies=directHeadacheReport(message)
+      const canPersist=qualifies && crewId===user.id && allowIngest(user.id)
+      const savedReport=canPersist ? saveObservation(db,user,{crewId:user.id,day,mission,source:'chat_self_report',values:{headache:true}},true) : null
+      if(savedReport) {
+        checkIns=allCheckIns()
+        subject=assessmentFor(user,day,checkIns,mission,'space').subjects.find(s=>s.id===crewId)!
+        urgentFinding=subject.space.find(f=>f.level==='red')
+      }
+      const finding = urgentFinding ?? (requested ? subject.space.find(f=>f.id===requested.id) : undefined)
+      const context = !finding && (savedReport || requestsHealthRecords(message)) ? healthContextFor(user, crewId, day, mission, checkIns) : undefined
       const result = await conversationTurn(message, language as 'tr' | 'en', finding, finding ? subject.info[finding.id] : undefined, context ?? undefined)
       const replyId = replyReceipts.issue(user.id, result.reply)
-      return send(res, 200, { ...result, replyId, replyExpiresInSeconds: 120, persisted: false })
+      return send(res, 200, { ...result, replyId, replyExpiresInSeconds: 120, persisted:!!savedReport, healthRecord:{status:savedReport?'saved':'not_saved',reason:savedReport?'Direct self-reported headache saved.':qualifies?crewId!==user.id?'Selected astronaut differs from signed-in account; no automatic attribution.':'Health-record rate limit reached; symptom not recorded.':'No unambiguous supported self-report detected.',observation:savedReport} })
     }
 
     if (method === 'GET' && path === '/api/voice/status') return send(res, 200, voiceStatus())

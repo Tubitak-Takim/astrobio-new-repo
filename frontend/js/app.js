@@ -232,6 +232,8 @@
     if(['cole-r0','cole-alpha'].includes(event.target.id)) {const r=Number($('#cole-r0').value),a=Number($('#cole-alpha').value);$('#cole-r0-val').textContent=r;$('#cole-alpha-val').textContent=fmt(a,2);$('#cole-plot').innerHTML=colePlot(r,a);}
   }
   function init() {
+    routes['live-monitoring.html']='live';
+    pages.live=()=>connectedPage('Live Monitoring','LIVE INGESTION DEMONSTRATION');
     window.ASTROBIO_DESIGN={setMission(value){if(!Object.hasOwn(D.missionModes,value))return;S.mode=value;localStorage.setItem('astrobio-mode',value);render();}};
     document.addEventListener('click',handleClick);document.addEventListener('change',change);document.addEventListener('input',event=>{if(event.target.id.startsWith('cole-'))change(event);});
     document.addEventListener('submit',event=>{if(event.target.id!=='calendar-form')return;event.preventDefault();const notes=readNotes();notes[toDate(S.selectedDate)]=$('#calendar-note').value.slice(0,500);try{setNotes(notes);toast('Note saved in this browser.');render();}catch{toast('Unable to save the local note. Browser storage may be unavailable.');}});

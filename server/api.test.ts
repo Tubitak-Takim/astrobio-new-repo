@@ -10,6 +10,7 @@ import { CREW, readingOn } from '../src/data/simulatedCrew'
 import type { Assessment } from '../src/assessment'
 import type { CheckIns } from '../src/model'
 import type { CrewDatasetResponse } from '../src/crewDataset'
+import type { Observation } from '../src/model'
 import { createServer, type Server } from 'node:http'
 import { readJson, readBinary } from './http'
 
@@ -31,6 +32,11 @@ type TestPayload = Pick<Assessment, 'subjects' | 'mission' | 'report'> & {
   healthContext?: {subjectId:string;day:number;origin:string;previousSavedReadings:number}
   crew: CrewDatasetResponse['crew']
   version:string
+  persisted:boolean
+  observation:Observation
+  observations:Observation[]
+  total:number
+  healthRecord:{status:string;reason:string;observation:Observation|null}
 }
 
 let processHandle: ChildProcess | undefined
@@ -114,7 +120,8 @@ beforeAll(async () => {
 
 describe('same-origin frontend', () => {
   it('serves every frontend page and its local integration assets without signing in', async () => {
-    const pages = ['/', '/index.html', '/crew-data.html', '/ask-to-ai.html', '/bis-analizi.html', '/gorev-sagligi.html', '/gunluk-etkiler.html', '/gunluk-yuk.html', '/health-check.html', '/olcumler.html', '/personel-info.html', '/raporlar.html', '/ridge.html', '/takvim.html', '/toparlanma.html', '/uyku.html']
+    expect((await fetch(base+'/js/live-monitor.js')).status).toBe(200)
+    const pages = ['/', '/index.html', '/live-monitoring.html', '/crew-data.html', '/ask-to-ai.html', '/bis-analizi.html', '/gorev-sagligi.html', '/gunluk-etkiler.html', '/gunluk-yuk.html', '/health-check.html', '/olcumler.html', '/personel-info.html', '/raporlar.html', '/ridge.html', '/takvim.html', '/toparlanma.html', '/uyku.html']
     for (const path of pages) {
       const response = await fetch(base + path)
       expect(response.status, path).toBe(200)
@@ -141,6 +148,76 @@ describe('same-origin frontend', () => {
     }
     expect((await fetch(base + '/index.html', {method:'POST'})).status).toBe(405)
     expect((await fetch(base + '/api/state')).status).toBe(401)
+  })
+})
+
+describe('live ingestion and structured chat reports over HTTP',()=>{
+  it('preserves full manual records/images and lets a later complete check-in supersede older updates',async()=>{
+    const reading={...readingOn(CREW[3],6),attachment:{dataUrl:'data:image/jpeg;base64,UFJJVkFURQ==',width:1,height:1,bytes:7,attachedAt:'2026-11-15T00:00:00Z',caption:'PRIVATE_LIVE_IMAGE'}}
+    expect((await request('C4','PUT','/api/checkins/C4/6',reading)).status).toBe(200)
+    database!.prepare("UPDATE checkins SET updated_at=? WHERE crew_id='C4' AND day=6").run(new Date(Date.now()-2000).toISOString())
+    expect((await request('C4','POST','/api/observations',{crewId:'C4',day:6,mission:'mars',source:'manual_entry',values:{restingHrBpm:101}})).status).toBe(201)
+    const stored=JSON.parse(String(database!.prepare("SELECT reading FROM checkins WHERE crew_id='C4' AND day=6").get()!.reading))
+    expect(stored).toEqual(reading)
+    const data=await request('C4','GET','/api/crew-data?day=6&mission=mars')
+    expect(data.data.crew[0].series.at(-1)!.reading.restingHrBpm).toBe(101)
+    expect(JSON.stringify(data.data)).not.toContain('PRIVATE_LIVE_IMAGE')
+    database!.prepare("UPDATE checkins SET updated_at=? WHERE crew_id='C4' AND day=6").run(new Date(Date.now()+2000).toISOString())
+    const newer=await request('C4','GET','/api/crew-data?day=6&mission=mars')
+    expect(newer.data.crew[0].series.at(-1)!.reading.restingHrBpm).toBe(reading.restingHrBpm)
+    expect((await request('C4','GET','/api/observations?crewId=C4&day=6&mission=mars')).data.total).toBe(1)
+  })
+  it('authorizes writes and appends partial samples without creating full check-ins',async()=>{
+    const sample={crewId:'C4',day:2,mission:'mars',source:'external_api',values:{restingHrBpm:101,spo2Pct:98}}
+    expect((await request(null,'POST','/api/observations',sample)).status).toBe(401)
+    expect((await request('C1','POST','/api/observations',sample)).status).toBe(403)
+    expect((await request('FS','POST','/api/observations',sample)).status).toBe(403)
+    expect((await request('C4','POST','/api/observations',{...sample,values:{restingHrBpm:999}})).status).toBe(400)
+    const saved=await request('C4','POST','/api/observations',sample)
+    expect(saved.status).toBe(201);expect(saved.data.persisted).toBe(true)
+    expect(saved.data.observation.source).toBe('external_api')
+    expect(database!.prepare("SELECT count(*) AS n FROM checkins WHERE crew_id='C4' AND day=2").get()!.n).toBe(0)
+    expect((await request('C1','GET','/api/observations?crewId=C4&day=2&mission=mars')).status).toBe(403)
+    expect((await request('FS','GET','/api/observations')).status).toBe(403)
+    const read=await request('C2','GET','/api/observations?crewId=C4&day=2&mission=mars')
+    expect(read.data.total).toBe(1)
+    const data=await request('C4','GET','/api/crew-data?day=2&mission=mars')
+    expect(data.data.crew[0].series.at(-1)!.reading.restingHrBpm).toBe(101)
+    expect(data.data.crew[0].series.at(-1)!.observations![0].id).toBe(saved.data.observation.id)
+  })
+  it('persists own headache before context generation and supplies it in future record reviews',async()=>{
+    const start=modelPrompts.length
+    const result=await request('C4','POST','/api/chat',{crewId:'C4',day:2,mission:'mars',language:'en',message:'I have a headache'})
+    expect(result.status).toBe(200)
+    expect(result.data.persisted).toBe(true)
+    expect(result.data.healthRecord.observation).toMatchObject({crewId:'C4',day:2,source:'chat_self_report',values:{headache:true}})
+    expect(JSON.stringify(modelPrompts.slice(start))).toContain('chat_self_report')
+    const reading=await request('C4','GET','/api/crew-data?day=2&mission=mars')
+    expect(reading.data.crew[0].series.at(-1)!.reading.headache).toBe(true)
+    const later=await request('C4','POST','/api/chat',{crewId:'C4',day:3,mission:'mars',language:'en',message:'Review my health records'})
+    expect(later.status).toBe(200)
+    expect(later.data.reply).toContain('Day 2: headache reported')
+    const db=database!.prepare("SELECT values_json FROM health_observations WHERE source='chat_self_report' AND crew_id='C4'").all()
+    expect(db).toHaveLength(1)
+  })
+  it('does not attribute a CMO self-report to a selected colleague or save unconfirmed speech',async()=>{
+    const result=await request('C2','POST','/api/chat',{crewId:'C4',day:2,language:'en',message:'I have a headache'})
+    expect(result.status).toBe(200)
+    expect(result.data.persisted).toBe(false)
+    expect(result.data.healthRecord.reason).toContain('differs')
+    expect((await request('C4','POST','/api/chat',{crewId:'C4',day:2,message:'Başım ağrıyor',inputOrigin:'voice'})).status).toBe(400)
+    expect(database!.prepare("SELECT count(*) AS n FROM health_observations WHERE source='chat_self_report' AND crew_id='C2'").get()!.n).toBe(0)
+  })
+  it('records confirmed voice self-reports without bypassing urgent safeguards',async()=>{
+    await request('C4','POST','/api/observations',{crewId:'C4',day:4,mission:'mars',source:'manual_entry',values:{spo2Pct:70}})
+    const start=modelPrompts.length
+    const result=await request('C4','POST','/api/chat',{crewId:'C4',day:4,mission:'mars',message:'Başım ağrıyor',inputOrigin:'voice',transcriptConfirmed:true})
+    expect(result.status).toBe(200)
+    expect(result.data.reply).toContain('Status: red')
+    expect(modelPrompts).toHaveLength(start)
+    expect(result.data.persisted).toBe(true)
+    const rows=await request('C4','GET','/api/observations?crewId=C4&day=4&mission=mars')
+    expect(rows.data.observations.some(o=>o.source==='chat_self_report' && o.values.headache)).toBe(true)
   })
 })
 

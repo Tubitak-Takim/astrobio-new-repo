@@ -195,10 +195,10 @@ Tüm endpointler `Authorization: Bearer ...` gerektirir.
 
 - Mesaj 1–2000 karakter. Varsayılan dil `tr`, gün 60, görev `mars`, kişi oturum sahibidir.
 - Mürettebat kendi/kabin, CMO yetkili ekip/kabin verisi; Dünya rolüne bu pilot chat için 403.
-- `findingId` yoksa yalnız dar sosyal kapsam veya bağlam isteme/acil şablonu çalışır. Seçili kişide kırmızı bulgu varsa sosyal sohbetin de önüne geçer.
-- Yanıt: `route`, `reply`, `specialist`, `companion`, isteğe bağlı `original`, `experimental:true`, `replyId`, `replyExpiresInSeconds:120`, `persisted:false`.
+- `findingId` gerekli değildir; genel sohbet Qwen3'e, sağlık eğitimi MedGemma'ya gider. Açık kayıt incelemeleri/yeni kaydedilen öz-bildirimler sunucu üretimli bağlam alabilir. Seçili kişide kırmızı bulgu varsa sosyal sohbetin de önüne geçer.
+- Yanıt: `route`, `reply`, `specialist`, `companion`, isteğe bağlı `original`, `experimental:true`, `replyId`, `replyExpiresInSeconds:120`, `persisted`, `healthRecord:{status,reason,observation}`. `persisted:true`, tüm sohbeti değil yalnız desteklenen açık baş ağrısı öz-bildiriminin yapılandırılmış sağlık gözlemini belirtir.
 - Rotalar: `medical`, `social` (genel sohbet dahil), `urgent`; `needs_context` kaldırıldı. Bileşenlerin `state` alanlarını kontrol edin; model hatasını açıklayan servis mesajı HTTP 200 olabilir ve model yanıtı olarak sunulmaz.
-- Kalıcı sohbet hafızası, kişilik profili, konuşma geçmişi veya otomatik tanı yoktur. `replyId` yalnız TTS için iki dakika RAM'de metin tutar; kullanıcı başına en fazla 10, toplam 200 kayıt. API yeniden başlarsa kaybolur. `persisted:false`, veritabanına yazılmadığı anlamındadır; RAM'de hiç bulunmadığı anlamında değildir.
+- Kalıcı sohbet geçmişi, kişilik profili veya otomatik tanı yoktur. Ayrı yapılandırılmış sağlık gözlemleri SQLite'a kaydedilebilir; kendi hesabı seçiliyken desteklenen doğrudan “Başım ağrıyor” bildirimi aynı isteğin bağlamına da girer. Kayıt incelemeleri son yedi görev gününden en fazla sekiz alan güncellemesi alır. Ses transkripti önce onaylanmalıdır. `replyId` yalnız TTS için iki dakika RAM'de metin tutar; kullanıcı başına en fazla 10, toplam 200 kayıt. [Canlı API ve kayıt sınırları](LIVE_MONITORING.md).
 
 ### `POST /api/voice/transcribe?language=tr`
 

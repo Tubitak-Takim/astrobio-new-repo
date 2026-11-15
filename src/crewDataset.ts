@@ -3,7 +3,7 @@ import type { MissionId } from './data/missions.ts'
 import { CREW_PROFILES } from './data/crewProfiles.ts'
 import { SOURCES } from './data/sources.ts'
 import { cabinOn, type CrewMember } from './data/simulatedCrew.ts'
-import { getReading, keyOf, lastMeasured, type CheckIns } from './model.ts'
+import { getReading, keyOf, lastMeasured, observationsFor, type CheckIns, type Observation } from './model.ts'
 
 export interface CrewDataPoint {
   day: number
@@ -11,6 +11,7 @@ export interface CrewDataPoint {
   reading: Omit<CrewReading,'attachment'>
   cabin: {co2MmHg:number;cumulativeDoseMSv:number}
   measurementDays: Record<string,number>
+  observations?:Observation[]
 }
 
 export function measurementDays(day:number,manual:boolean) {
@@ -24,7 +25,8 @@ export function generatedSeries(crew: CrewMember,day:number,mission:MissionId,ch
     const {attachment:_attachment,...reading}=getReading(checkIns,crew,d,mission)
     const cabin=cabinOn(d,mission)
     const manual=Boolean(checkIns[keyOf(crew.id,d)])
-    return {day:d,origin:manual?'manual_checkin':'synthetic_dataset',reading,cabin:{co2MmHg:cabin.co2MmHg,cumulativeDoseMSv:cabin.cumulativeDoseMSv},measurementDays:measurementDays(d,manual)}
+    const observations=observationsFor(checkIns,crew.id,d,mission)
+    return {day:d,origin:manual?'manual_checkin':'synthetic_dataset',reading,cabin:{co2MmHg:cabin.co2MmHg,cumulativeDoseMSv:cabin.cumulativeDoseMSv},measurementDays:measurementDays(d,manual),...(observations.length?{observations}:{})}
   })
 }
 
@@ -46,7 +48,7 @@ export function dataRelationships(series: CrewDataPoint[]) {
     {id:'exercise-mass',label:'Exercise participation ↔ body mass',x:p=>p.reading.resistanceSessions7d,y:p=>p.reading.bodyMassKg,sourceIds:['EXERCISE_PLAN','MASS'],note:'Shared mission-time and energy-balance drivers can confound this association; it does not estimate exercise effects.'},
     {id:'day-vitamin',label:'Mission day ↔ vitamin D',x:p=>p.day,y:p=>p.reading.vitaminDNgMl,sourceIds:['VITD_FLIGHT'],note:'A deliberately programmed long-flight decline; scheduled lab measurements are held between sample days.'},
   ]
-  return definitions.map(d=>({id:d.id,label:d.label,r:pearson(series.map(d.x),series.map(d.y)),n:series.length,manualPoints:series.filter(p=>p.origin==='manual_checkin').length,sourceIds:d.sourceIds,note:d.note}))
+  return definitions.map(d=>({id:d.id,label:d.label,r:pearson(series.map(d.x),series.map(d.y)),n:series.length,manualPoints:series.filter(p=>p.origin==='manual_checkin').length,observationPoints:series.filter(p=>p.observations?.length).length,sourceIds:d.sourceIds,note:d.note}))
 }
 
 export function publicCrewProfile(id: string) {

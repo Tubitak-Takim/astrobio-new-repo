@@ -3,7 +3,7 @@
 import { CREW, MISSION_DAYS, cabinOn } from '../src/data/simulatedCrew.ts'
 import { canSee, type User } from '../src/data/users.ts'
 import { isMission, type MissionId } from '../src/data/missions.ts'
-import { buildDay, getReading, keyOf, type CheckIns } from '../src/model.ts'
+import { buildDay, getReading, keyOf, OBSERVATIONS, type CheckIns } from '../src/model.ts'
 import { SOURCES } from '../src/data/sources.ts'
 import type { CrewReading } from '../src/triage.ts'
 import { dataRelationships, generatedSeries } from '../src/crewDataset.ts'
@@ -43,9 +43,10 @@ export function healthContextFor(user: User, subjectId: string, day: number, mis
     findings: subject.space.map(({ id, level, measured, why, next, sourceIds }) => ({ id, level, measured, why: detailed.has(id) ? why : undefined, next: detailed.has(id) ? next : undefined, sourceIds })),
     sources: sourceIds.map(id => ({ id, status: SOURCES[id].status })),
     previousSavedReadings: history,
+    recentObservations:(checkIns[OBSERVATIONS] ?? []).filter(o=>o.crewId===subjectId && o.mission===mission && o.day<=day && o.day>=day-6).slice(-8),
     datasetVersion: SYNTHETIC_VERSION,
     associations: crew ? {fromDay:Math.max(1,day-29),toDay:day,results:dataRelationships(generatedSeries(crew,day,mission,checkIns)).map(({id,r,n,manualPoints})=>({id,r,n,manualPoints})),caution:'Exploratory correlations in a synthetic/mixed series, not causal effects or clinical predictions. Coefficients and coupling drivers are not NASA findings.'} : null,
-    limits: 'Simulation prototype, not clinically validated. database_checkin means a user-entered saved reading for this exact day; simulated_feed is not a database measurement. Older saved readings are historical and are not carried forward. History includes at most seven prior saved check-in summaries for this subject, limited to vital signs, sleep, body mass and headache; no lab trend history is included. All finding levels/measurements are included; detailed reasoning/next steps are limited to three priority findings. Provenance age/stale flags refer to the selected day, not the current calendar date.',
+    limits: 'Simulation prototype, not clinically validated. origin describes the base reading only; recentObservations are separate saved field updates. Observations apply only to their exact mission/person/day, ordered by measurement timestamp. Chat self-reports are reports, not diagnoses. Older saved readings are historical and are not carried forward. History includes at most seven prior saved check-in summaries; recentObservations includes at most eight updates within seven mission days. No images, arbitrary notes or transcript history. Provenance age/stale flags refer to the selected day, not the calendar date. Unrelated lab freshness is unchanged by partial updates.',
   }
   // Context is server bounded before generation; do not silently truncate a
   // finding or discard its stale flag to make it fit the model context window.
