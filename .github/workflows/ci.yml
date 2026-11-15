@@ -15,6 +15,7 @@ jobs:
       - run: node --check clients/voice-client.js
       - run: node --check frontend/js/backend.js
       - run: node --check frontend/js/shell.js
+      - run: node --check frontend/js/chat-language.js
       - run: node --check frontend/js/app.js
       - run: node --check frontend/js/data.js
       - run: node --check frontend/js/anatomy.js

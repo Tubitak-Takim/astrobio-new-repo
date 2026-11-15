@@ -4,6 +4,7 @@ import type { Finding } from '../src/triage.ts'
 import type { Provenance } from '../src/model.ts'
 import { SOURCES } from '../src/data/sources.ts'
 import { acquireInference } from './inference.ts'
+import { isFinalAnswer } from './finalAnswer.ts'
 
 export type LocalAiConfig = { enabled: boolean; baseUrl: string; model: string; timeoutMs: number }
 export type LocalAiState = 'disabled' | 'not_configured' | 'invalid_configuration' | 'unavailable' | 'model_missing' | 'remote_model_rejected' | 'ready'
@@ -119,7 +120,7 @@ export async function explainLocally(finding: Finding, provenance: Provenance | 
     // This catches some errors, NOT hallucinations/negations/new medical advice.
     const numbers = (s: string) => s.match(/\d+(?:[.,]\d+)?/g) ?? []
     const allowed = new Set(numbers(context))
-    if (data.done !== true || !output || output.length > 2000 || numbers(output).some((n) => !allowed.has(n))) return { ...base, state: 'rejected' as const }
+    if (data.done !== true || data.done_reason === 'length' || !isFinalAnswer(output) || output.length > 2000 || numbers(output).some((n) => !allowed.has(n))) return { ...base, state: 'rejected' as const }
     return { ...base, state: 'generated' as const, generated: output, model: config.model }
   } catch {
     return { ...base, state: signal.aborted ? 'timeout' as const : 'unavailable' as const }

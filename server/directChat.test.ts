@@ -11,9 +11,11 @@ describe('direct local chat', () => {
     { done: false, message: { content: 'Truncated' } },
     { done: true, message: { content: '<think>Internal reasoning</think> Hello' } },
     { done: true, message: { content: 'x'.repeat(5201) } },
+    { done: true, done_reason: 'length', message: { content: 'An unfinished answer' } },
+    { done: true, message: { content: '<unused94> thought\nDraft 1: internal notes' } },
   ])('rejects empty, incomplete, reasoning-tagged and oversized content', async data => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('/api/tags') ? json({ models: [{ name: config.model }] }) : json(data)))
-    expect(await directChat(config, 'Hello', 'Be helpful.')).toMatchObject({ state: 'rejected', value: null })
+    expect(await directChat(config, 'Hello', 'Be helpful.')).toMatchObject({ state: 'done_reason' in data && data.done_reason === 'length' ? 'truncated' : 'rejected', value: null })
   })
   it('rejects remote models and releases the shared inference slot after a failure', async () => {
     const fetcher = vi.fn(async () => json({ models: [{ name: config.model, remote_host: 'https://example.com' }] }))
@@ -41,5 +43,25 @@ describe('direct local chat', () => {
     release()
     expect((await first).state).toBe('generated')
     expect((await directChat(config,'Try again','Be helpful.')).state).toBe('generated')
+  })
+  it('accepts only the final medical reply field and embeds instructions for imported Gemma templates', async () => {
+    const bodies: Record<string, unknown>[]=[]
+    vi.stubGlobal('fetch',vi.fn(async(url:string,options?:RequestInit)=>{
+      if(url.endsWith('/api/tags')) return json({models:[{name:config.model}]})
+      bodies.push(JSON.parse(String(options?.body)))
+      return json({done:true,done_reason:'stop',message:{content:JSON.stringify({reply:'A complete final response.'}),thinking:'Not for display'}})
+    }))
+    expect(await directChat(config,'A test question','Give general information.','reply')).toMatchObject({state:'generated',value:'A complete final response.'})
+    expect(bodies[0].format).toMatchObject({required:['reply']})
+    expect((bodies[0].messages as {content:string}[])[1].content).toContain('Give general information.')
+    expect((bodies[0].messages as {content:string}[])[1].content).toContain('USER_MESSAGE:\nA test question')
+  })
+  it.each([
+    '<unused94> thought\nDraft 1: internal notes',
+    JSON.stringify({reply:'**Draft 2:**\nNot final'}),
+    JSON.stringify({reply:'An answer',analysis:'Internal notes'}),
+  ])('fails closed on malformed or contaminated medical JSON',async content=>{
+    vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.endsWith('/api/tags')?json({models:[{name:config.model}]}):json({done:true,message:{content}})))
+    expect(await directChat(config,'A test question','Be helpful.','reply')).toMatchObject({state:'rejected',value:null})
   })
 })

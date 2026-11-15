@@ -2,8 +2,9 @@
 // weights, sends database records implicitly or exposes reasoning tokens.
 import { acquireInference } from './inference.ts'
 import { probeLocalModel, readLocalJson, type LocalAiConfig } from './localAi.ts'
+import { isFinalAnswer } from './finalAnswer.ts'
 
-export async function directChat(config: LocalAiConfig, message: string, instruction: string, structured = false) {
+export async function directChat(config: LocalAiConfig, message: string, instruction: string, format?: 'opening' | 'reply') {
   const base = { value: null as string | null, model: config.model || null }
   if (!config.enabled) return { ...base, state: 'disabled' }
   if (!config.model) return { ...base, state: 'not_configured' }
@@ -13,21 +14,36 @@ export async function directChat(config: LocalAiConfig, message: string, instruc
   try {
     const state = await probeLocalModel(config, signal)
     if (state !== 'ready') return { ...base, state }
+    const finalInstruction = `${instruction} Output only the final user-facing answer. Never include internal reasoning, thought tokens, analysis, drafts, critiques or revision notes.${format === 'reply' ? ' Return JSON with exactly one field "reply", containing only the complete final answer as a string. Keep it under 180 words.' : ''}`
     const data = await readLocalJson(await fetch(`${config.baseUrl}/api/chat`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, redirect: 'error', signal,
       body: JSON.stringify({
         model: config.model, stream: false, keep_alive: 0, think: false,
-        ...(structured ? { format: { type: 'object', properties: { opening: { type: 'string', enum: ['acknowledge', 'calm', 'thanks'] } }, required: ['opening'], additionalProperties: false } } : {}),
-        messages: [{ role: 'system', content: instruction }, { role: 'user', content: message }],
-        options: { temperature: structured ? 0 : 0.3, num_ctx: 4096, num_predict: structured ? 64 : 512 },
+        ...(format ? { format: { type: 'object', properties: format === 'opening' ? { opening: { type: 'string', enum: ['acknowledge', 'calm', 'thanks'] } } : { reply: { type: 'string' } }, required: [format], additionalProperties: false } } : {}),
+        messages: [{ role: 'system', content: finalInstruction }, {
+          role: 'user',
+          // Some imported Gemma templates drop system messages. Repeat the
+          // output contract inside the medical user turn; do not alter weights
+          // or the user's existing Ollama template/model registration.
+          content: format === 'reply' ? `${finalInstruction}\n\nUSER_MESSAGE:\n${message}` : message,
+        }],
+        options: { temperature: format ? 0 : 0.3, num_ctx: 4096, num_predict: format === 'opening' ? 64 : format === 'reply' ? 768 : 512 },
       }),
     }), 65_536)
     const output = data.message as Record<string, unknown> | undefined
     // Qwen thinking lives in message.thinking; only final content is returned.
-    const value = typeof output?.content === 'string' ? output.content.trim() : ''
+    let value = typeof output?.content === 'string' ? output.content.trim() : ''
+    if (data.done_reason === 'length') return { ...base, state: 'truncated' }
+    if (format === 'reply') {
+      const parsed: unknown = JSON.parse(value)
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ...base, state: 'rejected' }
+      const fields = parsed as Record<string, unknown>
+      if (Object.keys(fields).length !== 1 || typeof fields.reply !== 'string') return { ...base, state: 'rejected' }
+      value = fields.reply.trim()
+    }
     // Leave space for the medical label/disclaimer within the 6000-char speech receipt.
-    if (data.done !== true || !value || value.length > 5200 || /<\/?think\b/i.test(value)) return { ...base, state: 'rejected' }
+    if (data.done !== true || !isFinalAnswer(value)) return { ...base, state: 'rejected' }
     return { ...base, state: 'generated', value }
-  } catch { return { ...base, state: signal.aborted ? 'timeout' : 'unavailable' } }
+  } catch (error) { return { ...base, state: signal.aborted ? 'timeout' : error instanceof SyntaxError ? 'rejected' : 'unavailable' } }
   finally { release() }
 }

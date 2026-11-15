@@ -1,5 +1,6 @@
 // Same-origin adapter. Health rules and authorization remain on the Node server.
 import { AstrobioVoiceClient } from '/clients/voice-client.js';
+import { replyLanguage } from './chat-language.js';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const $ = (s) => document.querySelector(s);
@@ -7,6 +8,7 @@ let token = sessionStorage.getItem('astrobio-session') || '';
 let users = [], state = null, assessment = null, pipeline = null, subjectId = '', day = 60;
 let generation = 0, voice = null, chat = [], busy = false, transcript = false;
 let activeMission = '', loading = true, failure = '';
+let languageMode = 'auto', detectedLanguage = 'en';
 const listeners = new AbortController();
 const numeric = {
   hematocritPct:'Hematocrit (%)', onsdMm:'ONSD (mm)', sleepHours7d:'7-day sleep average (hours)',
@@ -19,7 +21,8 @@ const numeric = {
 const booleans = {visionChange:'Vision change', ijvClotSeen:'IJV clot seen', headache:'Headache'};
 const mission = () => $('.delay-option.active')?.dataset.mode || localStorage.getItem('astrobio-mode') || 'mars';
 const route = () => $('.nav-link.active')?.dataset.route || 'overview';
-const context = () => ({day, mission: mission(), crewId: subjectId, language:'en'});
+const language = () => languageMode === 'auto' ? detectedLanguage : languageMode;
+const context = () => ({day, mission: mission(), crewId: subjectId, language:language()});
 const message = (text) => { const el = $('#backend-error'); if (el) el.textContent = text; };
 
 function clearSession() {
@@ -28,6 +31,7 @@ function clearSession() {
 }
 function resetChat() {
   voice?.revokeConsent(); voice = null; chat = []; busy = false; transcript = false;
+  detectedLanguage = 'en';
 }
 async function api(path, options = {}) {
   const response = await fetch(path, {...options, headers: {
@@ -118,6 +122,11 @@ function drawFindings(host) {
 function drawChat(host) {
   host.insertAdjacentHTML('beforeend', `<p>Messages go directly to local AI without selecting a finding: Qwen3 handles general conversation; MedGemma handles health education. Generated health information is not a personal assessment. Emergency warnings take priority. Chat history is not stored on the server.</p><button class="btn" data-backend="pipeline">Check model / voice status</button><pre id="backend-pipeline" class="backend-info"></pre><div id="backend-chat" class="backend-messages" aria-live="polite"></div><form id="backend-chat-form"><label for="backend-prompt">Message / voice transcript to confirm</label><textarea class="field" id="backend-prompt" maxlength="2000" required placeholder="Ask a question or start a voice recording"></textarea><div class="backend-toolbar"><button id="backend-send" class="btn primary">Send</button><label><span><input id="backend-voice-consent" type="checkbox"> I consent to microphone recording and local STT/TTS processing</span></label><button type="button" class="btn" data-backend="record">Record 8 seconds</button><button type="button" class="btn ghost" data-backend="stop">Stop / cancel audio</button></div><p id="backend-transcript" class="backend-info">Transcripts are not sent automatically; review and confirm them first. Voice requires localhost/HTTPS and a running voice:server.</p></form>`);
   renderChat();
+  const selector = document.createElement('label');
+  selector.className = 'backend-toolbar';
+  selector.innerHTML = 'Reply / recording language <select id="backend-language" class="field"><option value="auto">Auto (message language)</option><option value="en">English</option><option value="tr">Turkish</option></select>';
+  $('#backend-chat-form').prepend(selector);
+  $('#backend-language').value = languageMode;
   host.insertAdjacentHTML('beforeend', '<p class="backend-info">Speech playback uses your configured local voice. An English voice is recommended for English replies; no voice model is replaced automatically.</p>');
 }
 function renderChat() {
@@ -141,6 +150,7 @@ async function submitChat() {
   if (busy) return;
   const input = $('#backend-prompt'), text = input.value.trim(); if (!text) return;
   if (transcript && !window.confirm('Do you confirm sending the reviewed voice transcript to the AI system?')) return;
+  if (languageMode === 'auto') detectedLanguage = replyLanguage(text, detectedLanguage);
   const current = generation;
   const fromVoice = transcript;
   busy = true; $('#backend-send').disabled = true; message('');
@@ -186,7 +196,7 @@ async function handleAction(action, button) {
       const audio=await voice.record(8);
       if (current!==generation) return;
       message('Preparing the local transcript…');
-      const result=await voice.transcribe(audio,'en');
+      const result=await voice.transcribe(audio,language());
       if (current!==generation) return;
       $('#backend-prompt').value=result.text; transcript=true; message('');
       $('#backend-transcript').textContent='Review / edit the transcript. The Send button will ask for explicit confirmation.';
@@ -231,6 +241,11 @@ document.addEventListener('click', async event => {
   finally { if(button.isConnected) button.disabled=false; }
 }, {signal:listeners.signal});
 document.addEventListener('change', event => {
+  if(event.target.id==='backend-language') {
+    languageMode=event.target.value;
+    voice?.stop();
+    return;
+  }
   if(event.target.id==='backend-day') {
     const value=Number(event.target.value);
     if(!Number.isInteger(value)||value<1||value>90) { message('Mission day must be an integer from 1 to 90.'); event.target.value=day; return; }

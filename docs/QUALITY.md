@@ -78,6 +78,8 @@ Arayüz düzenlemesi: aktif arayüz İngilizcedir; backend bağlantı paneli yal
 
 Doğrudan mesaj/Qwen3 güncellemesi: **147 Node/DOM testi ve TypeScript kontrolü başarılıdır.** Kullanıcının örnek genel sağlık sorusunun bulgu olmadan MedGemma'ya aynen gitmesi, genel konuşmanın Qwen rolüne gitmesi, acil bypass, çıktı sınırı/reasoning reddi ve ortak üretim kilidi sınanır. Geçici sandbox'ta gerçek kurulum betiği sahte Ollama ile çalıştırılarak medical→companion sırası, yalnız Qwen indirme isteği, ayrı kilitler ve MedGemma ayarlarının korunması doğrulanır. Gerçek Qwen ağırlığı indirilmedi/çalıştırılmadı; klinik doğruluk ve üretim kalitesi doğrulanmış sayılmaz.
 
+Nihai yanıt/dil düzeltmesi: **178 Node/DOM testi ve TypeScript kontrolü başarılıdır.** MedGemma özel düşünme token'ları, Draft/Critique/Revise biçimleri, hatalı/ek alanlı medikal JSON ve `done_reason:length` çıktısının gösterilmemesi sınanır. Auto/English/Turkish seçimi ve Türkçe istek diline uygun giriş/uyarı kontrol edilir. Kullanıcının kurulu MedGemma ve Qwen3 modelleriyle gerçek, sentetik Türkçe uyku ve kurgusal baş ağrısı istemleri ayrıca denendi: iki rol de `generated`, taslak token'ı olmadan nihai yanıt üretti. Bu, klinik güvenilirlik veya kapsamlı ses/GPU doğrulaması değildir; gerçek hasta kaydı/mikrofon verisi kullanılmadı.
+
 ## Açık işler / üretim engelleri
 
 1. **Ölçüm geçmişi:** kişi+gün tam check-in yerine ölçüm bazlı zaman/kaynak geçmişi; önceki manuel ölçümün sonraki gün geçerliliği.

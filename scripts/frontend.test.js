@@ -41,11 +41,11 @@ describe('frontend API adapter',()=>{
   it('uses real chat API instead of the standalone demo response',async()=>{
     await boot('ai',true);
     expect(document.body.textContent).not.toContain('Design demo');
-    document.querySelector('#backend-prompt').value='Merhaba';
+    document.querySelector('#backend-prompt').value='Hello';
     submit('#backend-chat-form');
     await vi.waitFor(()=>expect(document.body.textContent).toContain('Canonical AI reply'));
     const call=requests.find(r=>r.path==='/api/chat');
-    expect(JSON.parse(call.options.body)).toMatchObject({message:'Merhaba',crewId:'C1',mission:'mars',day:60,inputOrigin:'text',language:'en'});
+    expect(JSON.parse(call.options.body)).toMatchObject({message:'Hello',crewId:'C1',mission:'mars',day:60,inputOrigin:'text',language:'en'});
     expect(document.querySelector('#backend-panel')).toBeNull();
     expect(document.body.textContent).not.toContain('AUTHORIZED BACKEND CONNECTION');
     expect(document.querySelector('[data-backend=speak]').dataset.reply).toBe('receipt');
@@ -130,5 +130,24 @@ describe('frontend API adapter',()=>{
     expect(document.querySelector('#backend-panel')).not.toBeNull();
     expect(document.body.textContent).toContain('AUTHORIZED BACKEND CONNECTION');
     expect(document.querySelector('#backend-checkin-form')).not.toBeNull();
+  });
+  it('automatically requests Turkish for a Turkish message without changing English UI labels',async()=>{
+    await boot('ai',true);
+    document.querySelector('#backend-prompt').value='Biraz baş ağrım var, ne yapabilirim?';
+    submit('#backend-chat-form');
+    await vi.waitFor(()=>expect(requests.some(r=>r.path==='/api/chat')).toBe(true));
+    expect(JSON.parse(requests.find(r=>r.path==='/api/chat').options.body).language).toBe('tr');
+    expect(document.querySelector('#backend-send').textContent).toBe('Send');
+  });
+  it('allows an explicit reply language and uses it for voice transcription',async()=>{
+    await boot('ai',true);
+    const select=document.querySelector('#backend-language'); select.value='tr';
+    select.dispatchEvent(new Event('change',{bubbles:true}));
+    const {AstrobioVoiceClient: Voice}=await import('../clients/voice-client.js');
+    vi.spyOn(Voice.prototype,'record').mockResolvedValue(new Blob(['synthetic-test-audio']));
+    const transcribe=vi.spyOn(Voice.prototype,'transcribe').mockResolvedValue({text:'Merhaba'});
+    document.querySelector('#backend-voice-consent').checked=true;
+    document.querySelector('[data-backend=record]').click();
+    await vi.waitFor(()=>expect(transcribe).toHaveBeenCalledWith(expect.any(Blob),'tr'));
   });
 });

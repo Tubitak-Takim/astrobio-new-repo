@@ -35,6 +35,12 @@ Bas-konuş mikrofonu → yerel STT → kullanıcı transkripti görür/düzeltir
 
 İki model kullanmak klinik doğruluk garantisi vermez. Bulgu olmadan verilen sağlık yanıtı **AI tarafından üretilmiş genel eğitim bilgisidir**, kanonik ölçüm değerlendirmesi değildir. TTS son `reply` metnini, bu durumda deneysel sağlık yanıtı ve uyarısıyla birlikte okur. `think:false` kullanılır; Qwen reasoning alanı gösterilmez. Modeller offline/kapalı/eksikse sahte sohbet cevabı yerine servis durumu açıklanır.
 
+### Nihai yanıt ve sohbet dili
+
+İçe aktarılmış MedGemma şablonları system mesajını atlayabildiği için çıktı sözleşmesi medikal user turn içinde de tekrarlanır; mevcut model/şablon değiştirilmez. Medikal üretim yalnız tek `reply` alanlı JSON olarak kabul edilir. `<unused94>`/`<think>` gibi token'lar, tanınan Draft/Critique/Revise başlıkları ve token sınırında kesilmiş metin reddedilir; ham taslak kullanıcıya, Qwen'e veya TTS'ye aktarılmaz. Kontrol sezgiseldir; işaretsiz tüm akıl yürütme veya tıbbi hata türlerini yakalama garantisi yoktur.
+
+Arayüz İngilizce kalır; sohbet dili Auto/English/Turkish ile seçilebilir. Auto mesaj metninden dil sezgisi kullanır, belirsiz mesajda son tespit edilen dili korur. Giriş/uyarı/servis metinleri de istek diliyle eşleşir. Mikrofon transkripsiyonu için dil açıkça seçilebilir. Önceki sohbet mesajları hâlâ sunucuya otomatik eklenmez.
+
 ## 2. Qwen3 1.7B kurulumu
 
 Mevcut MedGemma kurulumu aynı şekilde kalır. İkinci model için:

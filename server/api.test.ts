@@ -77,7 +77,7 @@ beforeAll(async () => {
     const format = body.format as { required?: string[] } | undefined
     const content = body.model === 'test-companion'
       ? format?.required?.[0] === 'opening' ? JSON.stringify({ opening: 'thanks' }) : 'Hello. I am Astrobio, your AI assistant.'
-      : 'Experimental explanation. Review the original finding.'
+      : format?.required?.[0] === 'reply' ? JSON.stringify({ reply: 'Experimental explanation. Review the original finding.' }) : 'Experimental explanation. Review the original finding.'
     res.end(JSON.stringify({ done: true, message: { content } }))
   })
   await new Promise<void>((resolve) => modelServer!.listen(0, '127.0.0.1', resolve))
@@ -262,7 +262,7 @@ describe('real HTTP API', () => {
     expect(health.data.reply).not.toContain('Select the relevant finding')
     const turns = modelPrompts.slice(before)
     expect(turns.map(t => t.model)).toEqual(['test-medgemma', 'test-companion'])
-    expect((turns[0].messages as { content: string }[])[1].content).toBe(question)
+    expect((turns[0].messages as { content: string }[])[1].content).toContain(`USER_MESSAGE:\n${question}`)
     const social = await request('C1', 'POST', '/api/chat', { message: 'Tell me about exploring Mars.', language: 'en' })
     expect(social.status).toBe(200)
     expect(social.data.reply).toBe('Hello. I am Astrobio, your AI assistant.')
