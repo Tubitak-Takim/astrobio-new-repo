@@ -22,11 +22,11 @@ export function lightContext(user:User,input:Record<string,unknown>) {
   return {crewId:input.crewId,day:input.day,mission:input.mission}
 }
 type Context=ReturnType<typeof lightContext>
-function preferencesFor(db:DatabaseSync,c:Context) {
+export function preferencesFor(db:DatabaseSync,c:Context) {
   const row=db.prepare('SELECT preferences,at,by_user FROM light_preferences WHERE crew_id=? AND mission=?').get(c.crewId,c.mission)
   return {preferences:row?JSON.parse(String(row.preferences)) as LightPreferences:defaultLightPreferences(c.crewId),origin:row?'saved_preferences':'demo_default',updatedAt:row?.at ?? null}
 }
-function latestStress(db:DatabaseSync,c:Context) {
+export function latestStress(db:DatabaseSync,c:Context) {
   const row=db.prepare('SELECT score,at FROM light_stress_reports WHERE crew_id=? AND mission=? AND day=? ORDER BY id DESC LIMIT 1').get(c.crewId,c.mission,c.day)
   return row?{score:Number(row.score),at:String(row.at)}:null
 }

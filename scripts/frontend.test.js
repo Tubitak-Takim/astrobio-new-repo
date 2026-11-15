@@ -29,6 +29,14 @@ beforeEach(()=>{
 afterEach(()=>{adapter?.dispose();vi.restoreAllMocks();vi.unstubAllGlobals();document.body.replaceChildren();});
 
 describe('frontend API adapter',()=>{
+  it('shows retrieved-data provenance for a current lighting answer without a misleading write receipt',async()=>{
+    const original=fetchMock.getMockImplementation();
+    fetchMock.mockImplementation((path,options)=>path==='/api/chat'?Promise.resolve({ok:true,json:async()=>({reply:'The cabin target is 42.5%, not a measured sensor value.',dataContext:{topics:['lighting'],mission:'mars',day:60,sampledAt:'2026-11-15T21:30:00Z'},healthRecord:{status:'not_saved',reason:'Read-only query',observation:null}})}):original(path,options));
+    await boot('ai',true);document.querySelector('#backend-prompt').value='Current cabin brightness?';submit('#backend-chat-form');
+    await vi.waitFor(()=>expect(document.querySelector('#backend-chat').textContent).toContain('Server data · lighting'));
+    expect(document.querySelector('#backend-chat').textContent).toContain('Read-only');
+    expect(document.querySelector('#backend-chat').textContent).not.toContain('Health record not saved');
+  });
   it('downloads the mission CSV using authorization headers, without exposing a token in the URL',async()=>{
     const original=fetchMock.getMockImplementation(),create=vi.fn(()=> 'blob:csv');
     vi.stubGlobal('URL',Object.assign(class extends URL {},{createObjectURL:create,revokeObjectURL:vi.fn()}));

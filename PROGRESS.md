@@ -235,6 +235,13 @@ marked "demo only" are our wording. The database keeps test messages from develo
 
 ### Light & Circadian Care follow-up
 
+#### Natural data access and selected-day widgets
+
+- Fixed the exact Turkish cabin-light question previously routed to generic stateless chat. New read-only application retrieval supplies fresh shared cabin targets/configuration, selected health readings/field overlays, stress and personal daily plans, bounded task/practice records, explicitly requested authorized notes/messages and CSV metadata. Explicit crew references are permission checked before model use; client-forged context and secrets/images/model files are excluded.
+- Added strict data-summary fact-ID selection through local Qwen. Mandatory original values, simulation/device disclaimers, stale/rule caveats and timestamps are server-rendered even if selection is irrelevant or generation fails. Urgent findings retain warning/bypass priority; existing medical record review, conservative self-report writes and voice confirmation remain intact. Ask to AI shows read-only source/scope/check-time metadata.
+- Changed light planning to circadian-demo-v2 with a one-item selected-day schedule (overnight continuation retained). Visible compact widgets now cover health, preferences, own stress, CMO cabin settings, the daily plan, reminders, recent actions and research status. Only detailed explanations/full history/evidence remain in bottom disclosures; rolling seven-day sleep/mood metrics keep their correct labels. Existing saved records/preferences and queued snapshots are preserved.
+- Validation: 348 Node/DOM tests and TypeScript passed, including the exact lighting regression, model-visible facts, current numeric readouts, unavailable/invalid-model fallback, read-only and scope/privacy behavior, delivered-message guards and daily widget visibility. A real qwen3:1.7b smoke test with an in-memory fictional context generated successfully and retained its 80% daytime/4500 K target, UTC time and disconnected-device disclaimer. Existing user health DB/settings/model files were not modified by the smoke test. No clinical, hardware or real-browser visual/accessibility validation is claimed. See docs/AI_DATA_ACCESS.md.
+
 #### Automatic cabin indicator and unified Earth-export follow-up
 
 - Added a compact mission-shared cabin light indicator driven by the server's Earth UTC clock: smooth warm wake-up, brighter neutral daytime, gradual warm evening dimming and low night ambience. Only CMO can persist the shared schedule, independently of personal sleep preferences. Targets remain explicitly simulated, with no measured feedback, device commands or treatment claim; safety/task lighting and sleep quarters remain separate.

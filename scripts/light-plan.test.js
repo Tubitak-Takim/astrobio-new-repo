@@ -13,8 +13,8 @@ function boot(userId='C1') {
   });
   dispose=mountLightPlan(document.body,api,{crewId:'C1',day:60,mission:'mars',userId,role:userId==='C2'?'cmo':'crew'});return api;
 }
-it('renders a seven-day calendar with the blue-light correction and research-only red panel',async()=>{
-  boot();await vi.waitFor(()=>expect(document.querySelectorAll('#light-calendar article')).toHaveLength(7));
+it('renders only the selected day with visible widgets and explanation-only disclosures',async()=>{
+  boot();await vi.waitFor(()=>expect(document.querySelectorAll('#light-calendar article')).toHaveLength(1));
   expect(document.body.textContent).toContain('blue light is not a bedtime relaxation therapy');
   expect(document.body.textContent).toContain('No light device connected');
   expect(document.body.textContent).toContain('Research review only');
@@ -25,6 +25,9 @@ it('renders a seven-day calendar with the blue-light correction and research-onl
   expect(document.querySelector('#cabin-lighting').textContent).toContain('Earth UTC');
   expect(document.querySelectorAll('details[open]')).toHaveLength(0);
   expect(document.querySelector('#cabin-preferences')).toBeNull();
+  for(const selector of ['#light-metrics','#light-preferences','#light-stress','#light-calendar','#light-history-summary','#light-research-summary'])expect(document.querySelector(selector).closest('details')).toBeNull();
+  expect(document.querySelector('#light-history').closest('details')).not.toBeNull();
+  expect(document.body.textContent).not.toContain('Mission day 61');
 });
 it('lets the CMO save the shared cabin schedule separately from personal preferences',async()=>{
   const api=boot('C2');await vi.waitFor(()=>expect(document.querySelector('#cabin-preferences [name=wakeTime]').value).toBe('07:00'));
@@ -43,7 +46,7 @@ it('saves a self-reported stress score and displays an automatic review without 
   expect(JSON.parse(call[1].body)).toEqual({crewId:'C1',day:60,mission:'mars',score:8});
 });
 it('allows research-review requests only and does not let a CMO self-report for a colleague',async()=>{
-  const api=boot('C2');await vi.waitFor(()=>expect(document.querySelectorAll('#light-calendar article')).toHaveLength(7));
+  const api=boot('C2');await vi.waitFor(()=>expect(document.querySelectorAll('#light-calendar article')).toHaveLength(1));
   expect(document.querySelector('#light-stress')).toBeNull();
   document.querySelector('[data-light-kind=red_review]').click();
   await vi.waitFor(()=>expect(api.mock.calls.some(([path])=>path.endsWith('/actions'))).toBe(true));

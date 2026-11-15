@@ -10,7 +10,7 @@ For real downlink, **CSV is a data format, not a communications protocol**. NASA
 
 ## Small, glanceable UI
 
-- **Light & Circadian Care:** one cabin card shows phase, dimmer-target percentage and Earth UTC time. It says **SIMULATION** and **Target — not measured**. Five-second server refresh updates the target. Longer settings, personal health signals, calendar, history and research are collapsed by default. Urgent/caution/review messages remain visible.
+- **Light & Circadian Care:** one cabin card shows phase, dimmer-target percentage and Earth UTC time. It says **SIMULATION** and **Target — not measured**. Five-second server refresh updates the target. Compact health/settings/status widgets and the **single selected-day plan** are directly visible; long explanations, full history and evidence are in bottom disclosures. Urgent/caution/review messages remain visible. [AI access and daily layout](AI_DATA_ACCESS.md).
 - **Reports:** **Download one CSV** and **Queue for Earth (demo)** are separate actions. Queue history/integrity is collapsed until requested or after a successful queue action. A download never claims to have transmitted anything.
 
 ## Cabin controller model

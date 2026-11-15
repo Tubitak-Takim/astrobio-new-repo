@@ -43,6 +43,8 @@ import { directSymptomReports } from '../src/symptoms.ts'
 import { ensureLightPlan, lightContext, lightPlanFor, saveLightAction, saveLightPreferences, saveLightStress, syncLightReview } from './lightPlan.ts'
 import { saveCabinLighting } from './cabinLighting.ts'
 import { createMissionCsv, downloadTelemetryBundle, ensureTelemetry, listTelemetryBundles, queueTelemetry, telemetryContext } from './telemetry.ts'
+import { applicationDataFor, explicitDataSubjects, requestedDataTopics } from './dataContext.ts'
+import { applicationDataTurn } from './dataConversation.ts'
 
 const PORT = Number(process.env.API_PORT ?? 8787)
 const dbFile = process.env.DB_FILE ?? 'data/crew-health.sqlite'
@@ -276,10 +278,16 @@ const server = createServer(async (req, res) => {
       const language = body.language ?? 'tr'
       const day = body.day ?? 60
       const mission = body.mission ?? 'mars'
-      const crewId = body.crewId ?? user.id
+      const crewInput = body.crewId ?? user.id
       if (body.inputOrigin === 'voice' && body.transcriptConfirmed !== true) return send(res, 400, { error: 'Confirm the transcript before sending it to chat.' })
-      if (!message || !validDay(day) || !isMission(mission) || (language !== 'tr' && language !== 'en') || typeof crewId !== 'string' || (body.findingId !== undefined && typeof body.findingId !== 'string') || (body.inputOrigin !== undefined && body.inputOrigin !== 'text' && body.inputOrigin !== 'voice')) return send(res, 400, { error: 'Invalid chat message or context.' })
+      if (!message || !validDay(day) || !isMission(mission) || (language !== 'tr' && language !== 'en') || typeof crewInput !== 'string' || (body.findingId !== undefined && typeof body.findingId !== 'string') || (body.inputOrigin !== undefined && body.inputOrigin !== 'text' && body.inputOrigin !== 'voice')) return send(res, 400, { error: 'Invalid chat message or context.' })
+      let crewId=crewInput
       if (crewId !== 'cabin' && !canSee(user, crewId)) return send(res, 403, { error: 'You may only chat about authorized findings.' })
+      const dataTopics=requestedDataTopics(message)
+      if(dataTopics.length) {
+        const explicit=explicitDataSubjects(message,user)
+        if(explicit.length===1)crewId=explicit[0]
+      }
       let checkIns = allCheckIns()
       let subject = assessmentFor(user, day, checkIns, mission, 'space').subjects.find((s) => s.id === crewId)
       if (!subject) return send(res, 404, { error: 'Subject not found.' })
@@ -299,8 +307,11 @@ const server = createServer(async (req, res) => {
       }
       const lightReview=savedReport?syncLightReview(db,savedReport,checkIns):null
       const finding = urgentFinding ?? (requested ? subject.space.find(f=>f.id===requested.id) : undefined)
-      const context = !finding && (savedReport || requestsHealthRecords(message)) ? healthContextFor(user, crewId, day, mission, checkIns) : undefined
-      const result = await conversationTurn(message, language as 'tr' | 'en', finding, finding ? subject.info[finding.id] : undefined, context ?? undefined)
+      const applicationContext=!requested && !savedReport && dataTopics.length && conversationRoute(message,false)!=='urgent'?applicationDataFor(db,user,crewId,day,mission,checkIns,message,language as 'tr'|'en'):null
+      const context = !applicationContext && !finding && (savedReport || requestsHealthRecords(message)) ? healthContextFor(user, crewId, day, mission, checkIns) : undefined
+      const result = applicationContext
+        ? await applicationDataTurn(message,language as 'tr'|'en',applicationContext,!!urgentFinding)
+        : await conversationTurn(message, language as 'tr' | 'en', finding, finding ? subject.info[finding.id] : undefined, context ?? undefined)
       const replyId = replyReceipts.issue(user.id, result.reply)
       return send(res, 200, { ...result, replyId, replyExpiresInSeconds: 120, persisted:!!savedReport,lightReview, healthRecord:{status:savedReport?'saved':'not_saved',reason:savedReport?'Direct self-reported symptoms saved (not a diagnosis).':qualifies?crewId!==user.id?'Selected astronaut differs from signed-in account; no automatic attribution.':'Health-record rate limit reached; symptom not recorded.':'No unambiguous supported self-report detected.',observation:savedReport} })
     }

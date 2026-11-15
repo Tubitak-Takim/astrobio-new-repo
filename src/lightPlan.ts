@@ -2,7 +2,7 @@ import { CREW } from './data/simulatedCrew.ts'
 import type { MissionId } from './data/missions.ts'
 import { buildDay, getReading, keyOf, observationsFor, type CheckIns } from './model.ts'
 
-export const LIGHT_PLAN_VERSION='circadian-demo-v1'
+export const LIGHT_PLAN_VERSION='circadian-demo-v2'
 export interface LightPreferences { wakeTime:string; bedTime:string; autoReview:boolean }
 export const LIGHT_SOURCES=[
   {title:'NASA: astronaut sleep and adjustable station lighting',url:'https://www.nasa.gov/missions/station/seven-ways-astronauts-improve-sleep-may-help-you-snooze-better-on-earth/',note:'A stable sleep/wake schedule and adjustable light spectrum/intensity help address repeated orbital sunrises. Our curve and UTC reference are demo settings, not an approved lighting protocol.'},
@@ -26,17 +26,15 @@ export function validLightPreferences(value:unknown):value is LightPreferences {
 export function lightSchedule(day:number,preferences:LightPreferences) {
   const wake=minutes(preferences.wakeTime),bed=wake+(minutes(preferences.bedTime)-wake+1440)%1440
   const point=(minute:number,d:number)=>({day:d+Math.floor(minute/1440),time:`${String(Math.floor(minute%1440/60)).padStart(2,'0')}:${String(minute%60).padStart(2,'0')}`})
-  return Array.from({length:Math.min(7,91-day)},(_,i)=>{
-    const d=day+i
+  const d=day
     const slot=(kind:string,title:string,start:number,end:number,mode:string,description:string)=>({kind,title,start:point(start,d),end:point(end,d),mode,description})
-    return {day:d,slots:[
+    return [{day:d,slots:[
       slot('wake_cue','Wake-time lighting reminder',wake,wake+30,'daylight','Illustrative planning window for mission-approved daytime lighting. Not a blue-light dose or a device instruction.'),
       slot('daytime','Daytime task lighting',wake+30,bed-90,'neutral','Use the mission-approved lighting plan for alertness and tasks; no therapeutic exposure is prescribed.'),
       slot('wind_down','Pre-sleep wind-down',bed-90,bed,'warm','Plan dim, warm-toned ambient lighting. Avoid blue-enriched/bright light near the intended sleep period.'),
       slot('sleep','Protected sleep opportunity',bed,wake+1440,'dark','Plan darkness, with only mission-approved safety lighting if needed. This is not overnight light treatment.'),
       ...(d%3===0?[slot('red_review','Red-light research review (no exposure)',wake+360,wake+375,'research','A demo discussion appointment only. CMO/research protocol review is required; no treatment, dose, wavelength or regeneration benefit is authorized.')]:[]),
-    ].sort((a,b)=>a.start.day-b.start.day || a.start.time.localeCompare(b.start.time))}
-  })
+    ].sort((a,b)=>a.start.day-b.start.day || a.start.time.localeCompare(b.start.time))}]
 }
 export function lightReview(crewId:string,day:number,mission:MissionId,checkIns:CheckIns,preferences:LightPreferences,stress:{score:number;at:string}|null) {
   const crew=CREW.find(c=>c.id===crewId)!

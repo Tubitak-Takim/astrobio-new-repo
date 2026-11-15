@@ -14,7 +14,7 @@ describe('circadian planning, not treatment control',()=>{
   })
   it('builds bounded calendars with explicit overnight and shifted sleep periods',()=>{
     const plan=lightSchedule(60,defaultLightPreferences('C1'))
-    expect(plan).toHaveLength(7)
+    expect(plan).toHaveLength(1)
     expect(plan[0].slots.find(s=>s.kind==='sleep')).toMatchObject({mode:'dark',start:{day:60,time:'22:30'},end:{day:61,time:'06:30'}})
     expect(plan[0].slots.find(s=>s.kind==='wind_down')).toMatchObject({mode:'warm',start:{day:60,time:'21:00'},end:{day:60,time:'22:30'}})
     expect(plan[0].slots.find(s=>s.kind==='red_review')!.description).toContain('no treatment')

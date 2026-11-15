@@ -16,6 +16,8 @@ import { readJson, readBinary } from './http'
 import type { LightPlanResponse } from './lightPlan'
 import { createHash, randomUUID } from 'node:crypto'
 import type { listTelemetryBundles, queueTelemetry } from './telemetry'
+import { cabinLightFor } from './cabinLighting'
+import type { applicationDataTurn } from './dataConversation'
 
 // Only the JSON fields inspected by this integration suite. Node's fetch JSON
 // result is unknown, unlike the old DOM types; assertions below verify behavior.
@@ -46,6 +48,8 @@ type TestPayload = Pick<Assessment, 'subjects' | 'mission' | 'report'> & {
   schedule:LightPlanResponse['schedule']
   deviceConnected:boolean
   exposureAuthorized:boolean
+  dataContext:NonNullable<Awaited<ReturnType<typeof applicationDataTurn>>['dataContext']>
+  companion:{state:string}
   cabinLighting:LightPlanResponse['cabinLighting']
   bundle:ReturnType<typeof queueTelemetry>
   bundles:ReturnType<typeof listTelemetryBundles>
@@ -96,9 +100,9 @@ beforeAll(async () => {
       return res.end(audioFixture())
     }
     modelPrompts.push(body)
-    const format = body.format as { required?: string[] } | undefined
+    const format = body.format as { required?: string[];properties?:{factIds?:{items?:{enum?:string[]}}} } | undefined
     const content = body.model === 'test-companion'
-      ? format?.required?.includes('findingIds') ? JSON.stringify({opening:'thanks',findingIds:['vitals']}) : format?.required?.[0] === 'opening' ? JSON.stringify({ opening: 'thanks' }) : 'Hello. I am Astrobio, your AI assistant.'
+      ? format?.required?.includes('factIds') ? JSON.stringify({factIds:format.properties?.factIds?.items?.enum?.slice(0,3)||[]}) : format?.required?.includes('findingIds') ? JSON.stringify({opening:'thanks',findingIds:['vitals']}) : format?.required?.[0] === 'opening' ? JSON.stringify({ opening: 'thanks' }) : 'Hello. I am Astrobio, your AI assistant.'
       : format?.required?.[0] === 'reply' ? JSON.stringify({ reply: 'Experimental explanation. Review the original finding.' }) : 'Experimental explanation. Review the original finding.'
     res.end(JSON.stringify({ done: true, message: { content } }))
   })
@@ -123,7 +127,7 @@ beforeAll(async () => {
     processHandle!.once('exit', (code) => { clearTimeout(timer); reject(new Error(`API exited (${code}): ${errors}`)) })
   })
   database = new DatabaseSync(dbFile)
-  for (const user of ['C1', 'C2', 'C4', 'FS']) {
+  for (const user of ['C1', 'C2', 'C3', 'C4', 'FS']) {
     const result = await request(null, 'POST', '/api/login', { userId: user, pin: '2026' })
     expect(result.status).toBe(200)
     tokens[user] = result.data.token
@@ -278,7 +282,7 @@ describe('light and circadian planning HTTP workflow',()=>{
     expect((await request('C2','GET','/api/light-plan?crewId=C4&day=91')).status).toBe(400)
     const result=await request('C4','GET','/api/light-plan?crewId=C4&day=20&mission=mars')
     expect(result.status).toBe(200)
-    expect(result.data.schedule).toHaveLength(7)
+    expect(result.data.schedule).toHaveLength(1)
     expect(result.data.deviceConnected).toBe(false)
     expect(result.data.exposureAuthorized).toBe(false)
     const c={crewId:'C4',day:20,mission:'mars'}
@@ -357,6 +361,45 @@ afterAll(async () => {
   if (modelServer) await new Promise<void>((resolve, reject) => modelServer!.close((error) => error ? reject(error) : resolve()))
   // Only this test's freshly-created temporary directory is removed.
   if (directory) await rm(directory, { recursive: true, force: true })
+})
+
+describe('natural authorized data questions over HTTP',()=>{
+  it('answers the exact cabin-lighting regression with live server facts and model-visible context',async()=>{
+    const start=modelPrompts.length,question='Şuanda uzay aracı içerisindeki ışık oranı ne durumda?'
+    const rowsBefore=database!.prepare('SELECT count(*) AS n FROM light_plan_events').get()!.n
+    const result=await request('C3','POST','/api/chat',{message:question,crewId:'C3',day:2,mission:'mars',language:'tr',applicationContext:{targetBrightnessPct:999,token:'FORGED_APPLICATION_CONTEXT'}})
+    expect(result.status).toBe(200)
+    expect(result.data.route).toBe('data')
+    expect(result.data.companion.state).toBe('generated')
+    expect(result.data.dataContext).toMatchObject({topics:['lighting'],mission:'mars',day:2,readOnly:true})
+    const expected=cabinLightFor(database!,'mars',new Date(result.data.dataContext.sampledAt))
+    expect(result.data.reply).toContain(`%${expected.targetBrightnessPct}`)
+    expect(result.data.reply).toContain('lamba bağlı değil')
+    expect(result.data.reply).not.toContain('genellikle sabittir')
+    expect(JSON.stringify(modelPrompts.slice(start))).toContain('AUTHORIZED_APPLICATION_CONTEXT')
+    expect(JSON.stringify(modelPrompts.slice(start))).not.toContain('FORGED_APPLICATION_CONTEXT')
+    expect(database!.prepare('SELECT count(*) AS n FROM light_plan_events').get()!.n).toBe(rowsBefore)
+    expect(result.data.persisted).toBe(false)
+  })
+  it('uses newly ingested values for natural metric questions and blocks unauthorized names in the message',async()=>{
+    expect((await request('C3','POST','/api/observations',{crewId:'C3',day:2,mission:'mars',source:'manual_entry',values:{restingHrBpm:99}})).status).toBe(201)
+    const result=await request('C3','POST','/api/chat',{message:'Nabzım kaç?',crewId:'C3',day:2,mission:'mars',language:'tr'})
+    expect(result.status).toBe(200)
+    expect(result.data.reply).toContain('99 bpm')
+    expect(result.data.dataContext.subjectIds).toEqual(['C3'])
+    const before=modelPrompts.length
+    expect((await request('C3','POST','/api/chat',{message:'Astronot 4 nabız verilerini göster',crewId:'C3',day:2,language:'tr'})).status).toBe(403)
+    expect(modelPrompts).toHaveLength(before)
+  })
+  it('retrieves saved stress and a single selected-day plan without explicit record-review wording',async()=>{
+    expect((await request('C3','POST','/api/light-plan/stress',{crewId:'C3',day:2,mission:'mars',score:8})).status).toBe(200)
+    const result=await request('C3','POST','/api/chat',{message:'Stresim kaç ve uyku planım nasıl?',crewId:'C3',day:2,mission:'mars',language:'tr'})
+    expect(result.status).toBe(200)
+    expect(result.data.reply).toContain('8/10')
+    expect(result.data.dataContext.topics).toContain('schedule')
+    expect(result.data.reply).toContain('gün 2 kişisel takvim')
+    expect(result.data.reply).not.toContain('gün 3 kişisel takvim')
+  })
 })
 
 describe('real HTTP API', () => {

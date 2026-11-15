@@ -2,9 +2,9 @@
 
 ## What this feature does (and does not do)
 
-**New compact cabin indicator:** the page now also displays a mission-shared automatic ambient target based on **Earth UTC** (gradual warm morning, brighter daytime, evening dimming, low night ambience). Personal mission-clock settings remain separate. CMO edits the cabin schedule; no device is connected. Settings, research and history are collapsed to keep the default view small. **Reports** now provides a unified authorized CSV and a simulated Earth queue. [Controller model, telemetry schema, research and demo](CIRCADIAN_TELEMETRY.md).
+**Current daily dashboard:** the page displays a mission-shared automatic ambient target based on **Earth UTC** (gradual warm morning, brighter daytime, evening dimming, low night ambience). Personal mission-clock settings remain separate. CMO edits the cabin schedule; no device is connected. Main values, daily plan, settings and brief status widgets are visible; only detailed explanations/history/evidence are collapsed at the bottom. **Reports** provides a unified authorized CSV and a simulated Earth queue. [Controller and telemetry](CIRCADIAN_TELEMETRY.md) · [Natural AI data access and daily widgets](AI_DATA_ACCESS.md).
 
-Open **Light & Circadian Care** in the left navigation. Each fictional astronaut has a mission-specific personal schedule, a calendar of up to seven mission days, reminder acknowledgments, stress self-reports and automatic medical/sleep-plan **review suggestions**.
+Open **Light & Circadian Care** in the left navigation. Each fictional astronaut has a mission-specific personal schedule, a **selected-day plan**, reminder acknowledgments, stress self-reports and automatic medical/sleep-plan **review suggestions**. Overnight continuation may end on the following day; there is no seven-day report.
 
 This is **not a treatment controller**. No hardware is connected; no light is switched on; no dose, irradiance or wavelength is prescribed. Colored UI borders are decorative, not light therapy. A saved reminder acknowledgment is not measured exposure, adherence or evidence of benefit. A CMO research-review request is not clinical approval.
 

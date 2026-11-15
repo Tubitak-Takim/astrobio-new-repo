@@ -8,6 +8,8 @@ Uzay görevleri için açıklanabilir sağlık değerlendirme uygulaması. HTML/
 
 ## NASA esintili sentetik astronot verileri
 
+**Ask to AI güncel veriye bağlıdır:** “Şuanda uzay aracı içerisindeki ışık oranı ne durumda?”, “Nabzım kaç?”, “Stresim kaç?” gibi sorular yetkili sunucu kayıtlarından yanıt alır; kaynağı ve kontrol zamanı görünür. Günlük sirkadiyen ekranında yalnız seçili günün planı ve açık kısa widget’lar bulunur; uzun açıklamalar alttaki sekmelerdedir. [Veri erişimi ve örnekler](docs/AI_DATA_ACCESS.md).
+
 **Otomatik kabin göstergesi:** sirkadiyen sayfasında Earth UTC’ye göre sabah açılan, gündüz aydınlık kalan, akşam kademeli azalan ve gece düşük seviyeye inen ortak kabin ışık hedefi görünür. Bu, bağlı donanım ölçümü değil simülasyondur; CMO ayarları kişisel uyku planlarından ayrıdır. **Reports → Download one CSV** yetkili yapılandırılmış sağlık/kabin/ışık kayıtlarını tek dosyada verir; **Queue for Earth (demo)** sıkıştırma, SHA-256 kontrolü ve gecikmeli demo teslimi gösterir. [Araştırma, aktarım sınırları ve sunum adımları](docs/CIRCADIAN_TELEMETRY.md).
 
 **Light & Circadian Care** sayfası sol menüden erişilebilir: kişisel görev-saati takvimi, loş-sıcak uyku hazırlığı, karanlık uyku dönemi, stres öz-bildirimi ve otomatik inceleme önerileri bulunur. Mavi ışık gece rahatlama tedavisi olarak önerilmez; kırmızı ışık yalnız CMO/araştırma incelemesi içindir. Otomatik tedavi veya cihaz kontrolü yoktur. [Sunum, kaynaklar ve API](docs/LIGHT_PLAN.md).

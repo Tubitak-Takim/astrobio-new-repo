@@ -162,7 +162,7 @@ function drawFindings(host) {
 }
 function drawChat(host) {
   host.insertAdjacentHTML('beforeend', `
-    <p>Messages go directly to local AI without selecting a finding. Qwen3 handles general conversation; MedGemma handles health education. Chat history is not stored, but clear direct self-reports are automatically saved as structured health observations for your own account, selected day and mission. Supported symptoms: headache, dizziness, nausea, vomiting, fatigue, sleep difficulty, abdominal/back/chest pain, shortness of breath, palpitations, cough, sore throat, feeling feverish, vision changes and diarrhea. Examples: “Başım dönüyor ve midem bulanıyor” or “I feel dizzy and nauseous”. Select yourself above. Negated, hypothetical, third-person, ambiguous and unsupported phrases are not automatically recorded. Multiple symptoms must be clearly attributed to yourself. Saved symptoms are reports, not diagnoses or measured vital signs. Chest pain and breathing difficulty trigger urgent warnings.</p>
+    <p>Ask naturally about current cabin lighting, health measurements, sleep plans, stress reports or saved records. The server retrieves authorized data for your question; exact values and sources are preserved. General conversation uses Qwen3 and health education uses MedGemma. Chat history is not stored, but clear direct self-reports are automatically saved for your own account, selected day and mission. Supported symptoms include headache, dizziness, nausea, vomiting, fatigue, sleep difficulty, pain, breathing difficulty, palpitations, cough, sore throat, feeling feverish, vision changes and diarrhea. Examples: “Başım dönüyor ve midem bulanıyor” or “I feel dizzy and nauseous”. Select yourself for self-reports. Negated, hypothetical, third-person, ambiguous and unsupported phrases are not automatically recorded. Saved symptoms are reports, not diagnoses or measured vital signs. Emergency warnings take priority.</p>
     <button class="btn" data-backend="pipeline">Check model / voice status</button>
     <pre id="backend-pipeline" class="backend-info"></pre>
     <div id="backend-chat" class="backend-messages" aria-live="polite"></div>
@@ -180,7 +180,7 @@ function drawChat(host) {
   renderChat();
   const selected=assessment.subjects.find(s=>s.id===subjectId);
   const dataNotice=document.createElement('p'); dataNotice.className='backend-info';
-   dataNotice.textContent=`Record reviews include authorized measurements, rule findings, up to seven previous check-in summaries and up to eight saved field updates from the last seven mission days for ${selected?.name || subjectId}, day ${day}. Base data: ${selected?.manual?'saved database check-in':'simulated feed'}; saved field updates can overlay this base. A newly saved self-report also triggers authorized record context in the same request unless urgent handling takes priority. Other people’s records, images, journal notes and full chat history are not attached. Other ordinary chat does not include database records. Select the correct person, mission and day above.`;
+   dataNotice.textContent=`Selected context: ${selected?.name || subjectId}, day ${day}, ${activeMission}. Current lighting is read from the server's live Earth UTC clock, not a fabricated sensor value. Health questions use authorized measurements and sources; full record reviews include bounded saved history. Journal notes and messages are retrieved only when you explicitly ask for them and permissions allow it. Ordinary social chat does not attach records. Credentials, images, model files and unauthorized crew data are never included. Select the correct person, mission and day above.`;
   $('#backend-chat-form').before(dataNotice);
   const selector = document.createElement('label');
   selector.className = 'backend-toolbar';
@@ -191,7 +191,7 @@ function drawChat(host) {
 }
 function renderChat() {
   const log = $('#backend-chat'); if (!log) return;
-  log.innerHTML = chat.map(m=>`<div class="backend-message"><strong>${m.role==='user'?'You':'Astrobio'}</strong><p>${esc(m.text)}</p>${m.recordStatus?`<p class="crew-notice" role="status">${esc(m.recordStatus)}</p>`:''}${m.lightReview&&['review','caution','urgent'].includes(m.lightReview.status)?`<p class="crew-notice">${esc(m.lightReview.action)} <a href="${esc(careHref(m.lightReview.status==='urgent'?'health-check.html':'light-therapy.html',m.lightingContext))}">${m.lightReview.status==='urgent'?'Open Health Check':'Review light / sleep plan'}</a></p>`:''}${m.replyId?`<button type="button" class="btn small" data-backend="speak" data-reply="${esc(m.replyId)}">Read reply aloud</button>`:''}</div>`).join('');
+  log.innerHTML = chat.map(m=>`<div class="backend-message"><strong>${m.role==='user'?'You':'Astrobio'}</strong><p>${esc(m.text)}</p>${m.dataContext?`<p class="backend-info">Server data · ${esc(m.dataContext.topics.join(', '))} · ${esc(m.dataContext.mission)} · Day ${m.dataContext.day} · Checked ${esc(m.dataContext.sampledAt)} · Read-only</p>`:''}${m.recordStatus?`<p class="crew-notice" role="status">${esc(m.recordStatus)}</p>`:''}${m.lightReview&&['review','caution','urgent'].includes(m.lightReview.status)?`<p class="crew-notice">${esc(m.lightReview.action)} <a href="${esc(careHref(m.lightReview.status==='urgent'?'health-check.html':'light-therapy.html',m.lightingContext))}">${m.lightReview.status==='urgent'?'Open Health Check':'Review light / sleep plan'}</a></p>`:''}${m.replyId?`<button type="button" class="btn small" data-backend="speak" data-reply="${esc(m.replyId)}">Read reply aloud</button>`:''}</div>`).join('');
   log.scrollTop = log.scrollHeight;
 }
 function drawReports(host) {
@@ -223,7 +223,7 @@ async function submitChat() {
     if (current !== generation) return;
     const record=result.healthRecord,observation=record?.observation;
     const reported=observation?.symptoms?.map(id=>id.replaceAll('_',' ')).join(', ') || (observation?.values?.headache?'headache':'structured health update');
-    chat.push({role:'bot',text:result.reply,replyId:result.replyId,lightReview:result.lightReview,lightingContext:context(),recordStatus:record ? observation?`Health record saved · ${observation.crewId} · Day ${observation.day} · ${observation.mission} · Self-reported: ${reported} · ${observation.receivedAt}`:`Health record not saved · ${record.reason}`:null});
+    chat.push({role:'bot',text:result.reply,replyId:result.replyId,dataContext:result.dataContext,lightReview:result.lightReview,lightingContext:context(),recordStatus:record && (!result.dataContext||observation) ? observation?`Health record saved · ${observation.crewId} · Day ${observation.day} · ${observation.mission} · Self-reported: ${reported} · ${observation.receivedAt}`:`Health record not saved · ${record.reason}`:null});
     transcript = false; $('#backend-transcript').textContent = 'Reply received. Speech playback authorization expires after 120 seconds.';
     renderChat();
   } catch (error) { if(current===generation) { message(error.message); input.value=text; } }
